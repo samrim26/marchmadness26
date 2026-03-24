@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 import { computeEntryProbabilities } from "@/lib/simulation";
 import { getRemainingGames, getCompletedGames } from "@/lib/bracket";
 import { formatPercent } from "@/lib/format";
+import Link from "next/link";
 import { StandingsTable } from "@/components/StandingsTable";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -79,9 +80,9 @@ export default async function StandingsPage() {
                 }`}
               >
                 <div className="flex items-start justify-between">
-                  <div className="font-semibold text-white text-lg">
+                  <Link href={`/path/${a.entryId}`} className="font-semibold text-white text-lg hover:text-blue-300 transition-colors">
                     {a.displayName}
-                  </div>
+                  </Link>
                   <StatusBadge analytics={a} />
                 </div>
 

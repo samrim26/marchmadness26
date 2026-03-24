@@ -241,6 +241,25 @@ export function conditionalPoolEVs(
 }
 
 /**
+ * Return every outcome in which the given entry finishes first or tied for first.
+ * Used by the "path to victory" detail page.
+ */
+export function getWinningOutcomes(
+  entryId: string,
+  entries: Entry[],
+  games: Game[],
+  results: Results
+): Results[] {
+  const entryIdx = entries.findIndex((e) => e.id === entryId);
+  if (entryIdx === -1) return [];
+  const outcomes = enumerateAllValidOutcomes(games, results);
+  const rows = buildOutcomeRows(outcomes, entries, games);
+  return rows
+    .filter((row) => row.scores[entryIdx] === row.maxScore)
+    .map((row) => row.outcome);
+}
+
+/**
  * Expose the raw outcome rows for use in rooting / scenario computation.
  * Caches outcomes so they are only enumerated once per call.
  */

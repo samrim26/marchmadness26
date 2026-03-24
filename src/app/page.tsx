@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { GAMES } from "@/data/games";
 import { ENTRIES } from "@/data/entries";
-import { RESULTS } from "@/data/results";
 import { SCORING_SETTINGS } from "@/data/settings";
 import { getTeamName } from "@/data/teams";
 import { getRemainingGames, getCompletedGames, getGamesWithKnownParticipants } from "@/lib/bracket";
 import { computeEntryProbabilities } from "@/lib/simulation";
+import { getResults } from "@/lib/getResults";
 import { formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GameCard } from "@/components/GameCard";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const RESULTS = await getResults();
   const analytics = computeEntryProbabilities(
     ENTRIES,
     GAMES,
@@ -137,7 +140,12 @@ export default function HomePage() {
                     className={`table-row-hover ${a.eliminated ? "opacity-50" : ""}`}
                   >
                     <td className="px-4 py-2.5 font-medium text-white">
-                      {a.displayName}
+                      <Link
+                        href={`/path/${a.entryId}`}
+                        className="hover:text-blue-300 transition-colors"
+                      >
+                        {a.displayName}
+                      </Link>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-300">
                       {a.currentScore}
