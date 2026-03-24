@@ -68,7 +68,8 @@ export default async function StandingsPage() {
             .sort(
               (a, b) =>
                 b.firstOrTieProbability - a.firstOrTieProbability ||
-                b.currentScore - a.currentScore
+                b.currentScore - a.currentScore ||
+                a.displayName.localeCompare(b.displayName)
             )
             .map((a) => (
               <div
