@@ -5,6 +5,7 @@ import { SCORING_SETTINGS } from "@/data/settings";
 import { getResults } from "@/lib/getResults";
 import { PRIZE_CONFIG, parseBracketName } from "@/data/prizeConfig";
 import { fetchLiveOdds, matchOddsToGames } from "@/lib/odds";
+import { fetchEspnOdds } from "@/lib/espnOdds";
 import { computePersonHedgeData } from "@/lib/hedging";
 import { computeEntryProbabilities } from "@/lib/simulation";
 import type { HedgeBet, PersonHedgeData } from "@/lib/types";
@@ -25,8 +26,24 @@ export default async function HedgingPage() {
     SCORING_SETTINGS
   );
 
-  // Fetch live odds
-  const { odds: rawOdds, error: oddsError } = await fetchLiveOdds();
+  // Fetch live odds — try ESPN (free, no key) first, fall back to The Odds API
+  let rawOdds = null;
+  let oddsError = null;
+  let oddsSource = "ESPN BET";
+
+  const espnResult = await fetchEspnOdds();
+  if (espnResult.odds && espnResult.odds.length > 0) {
+    rawOdds = espnResult.odds;
+  } else {
+    const apiResult = await fetchLiveOdds();
+    if (apiResult.odds && apiResult.odds.length > 0) {
+      rawOdds = apiResult.odds;
+      oddsSource = "The Odds API";
+    } else {
+      oddsError = apiResult.error ?? { type: "no_games" as const, message: espnResult.error ?? "No odds available." };
+    }
+  }
+
   const liveOdds = rawOdds ? matchOddsToGames(rawOdds, RESULTS) : [];
   const hasLiveOdds = liveOdds.length > 0;
 
@@ -44,7 +61,7 @@ export default async function HedgingPage() {
         <h1 className="text-2xl font-bold text-white">Hedging Guide</h1>
         <p className="text-slate-400 mt-1">
           Lock in guaranteed profit by betting against your pool position at a
-          sportsbook. Odds update every 10 minutes.
+          sportsbook.{hasLiveOdds && <span className="text-slate-500"> · Odds via {oddsSource}</span>}
         </p>
       </div>
 
