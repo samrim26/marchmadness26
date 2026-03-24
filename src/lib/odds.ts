@@ -115,8 +115,8 @@ export async function fetchLiveOdds(): Promise<{
       if (res.status === 401) {
         return { odds: null, error: { type: "api_error", message: "Invalid API key (401). Check your ODDS_API_KEY in Vercel environment variables.", status: 401 } };
       }
-      if (res.status === 422) {
-        // This sport key doesn't exist — try next
+      if (res.status === 422 || res.status === 431 || res.status === 404) {
+        // Sport key unavailable or no games — try next
         continue;
       }
       if (!res.ok) {
