@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { GAMES } from "@/data/games";
 import { ENTRIES } from "@/data/entries";
-import { RESULTS } from "@/data/results";
 import { SCORING_SETTINGS } from "@/data/settings";
+import { getResults } from "@/lib/getResults";
 import { PRIZE_CONFIG, parseBracketName } from "@/data/prizeConfig";
 import { fetchLiveOdds, matchOddsToGames } from "@/lib/odds";
 import { computePersonHedgeData } from "@/lib/hedging";
@@ -17,6 +17,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function HedgingPage() {
+  const RESULTS = await getResults();
   const analytics = computeEntryProbabilities(
     ENTRIES,
     GAMES,

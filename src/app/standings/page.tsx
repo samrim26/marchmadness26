@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { GAMES } from "@/data/games";
 import { ENTRIES } from "@/data/entries";
-import { RESULTS } from "@/data/results";
+
 import { SCORING_SETTINGS } from "@/data/settings";
+import { getResults } from "@/lib/getResults";
+
+export const dynamic = "force-dynamic";
 import { computeEntryProbabilities } from "@/lib/simulation";
 import { getRemainingGames, getCompletedGames } from "@/lib/bracket";
 import { formatPercent } from "@/lib/format";
@@ -13,7 +16,8 @@ export const metadata: Metadata = {
   title: "Standings | March Madness 2026",
 };
 
-export default function StandingsPage() {
+export default async function StandingsPage() {
+  const RESULTS = await getResults();
   const analytics = computeEntryProbabilities(
     ENTRIES,
     GAMES,

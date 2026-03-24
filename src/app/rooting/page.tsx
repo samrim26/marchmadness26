@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { GAMES } from "@/data/games";
 import { ENTRIES } from "@/data/entries";
-import { RESULTS } from "@/data/results";
+
 import { SCORING_SETTINGS } from "@/data/settings";
+import { getResults } from "@/lib/getResults";
+
+export const dynamic = "force-dynamic";
 import { getAllRootingData } from "@/lib/rooting";
 import { computeEntryProbabilities } from "@/lib/simulation";
 import { getGamesWithKnownParticipants, getGameParticipant } from "@/lib/bracket";
@@ -13,7 +16,8 @@ export const metadata: Metadata = {
   title: "Rooting Guide | March Madness 2026",
 };
 
-export default function RootingPage() {
+export default async function RootingPage() {
+  const RESULTS = await getResults();
   const analytics = computeEntryProbabilities(
     ENTRIES,
     GAMES,
