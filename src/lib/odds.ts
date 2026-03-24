@@ -101,8 +101,25 @@ export async function fetchLiveOdds(): Promise<{
     return { odds: null, error: { type: "no_key", message: "ODDS_API_KEY environment variable not set." } };
   }
 
-  // Try tournament-specific key first, fall back to general NCAAB
-  const sportsToTry = ["basketball_ncaab", "basketball_ncaab_championship_winner"];
+  // Auto-discover active basketball sport keys from the account, then
+  // fall back to a hardcoded list. This handles cases where the March
+  // Madness games are listed under a key we didn't anticipate.
+  let sportsToTry = ["basketball_ncaab", "basketball_ncaab_championship_winner"];
+  try {
+    const sportsRes = await fetch(
+      `${ODDS_API_BASE}/sports/?apiKey=${apiKey}&all=false`,
+      { cache: "no-store" }
+    );
+    if (sportsRes.ok) {
+      const allSports: { key: string; active: boolean }[] = await sportsRes.json();
+      const discovered = allSports
+        .filter((s) => s.active && s.key.includes("ncaa") && s.key.includes("basketball"))
+        .map((s) => s.key);
+      if (discovered.length > 0) sportsToTry = discovered;
+    }
+  } catch {
+    // fall through to hardcoded list
+  }
 
   for (const sport of sportsToTry) {
     try {
@@ -139,7 +156,7 @@ export async function fetchLiveOdds(): Promise<{
     }
   }
 
-  return { odds: null, error: { type: "no_games", message: "No matching sport keys found in The Odds API." } };
+  return { odds: null, error: { type: "no_games", message: `No NCAAB games found. Tried sport keys: ${sportsToTry.join(", ")}. Games may not be posted yet or your plan may not include this sport.` } };
 }
 
 function parseOddsResponse(data: OddsApiGame[]): GameOdds[] {
