@@ -239,29 +239,21 @@ function computeHedges(
         );
         if (!odds) continue;
 
-        // Align odds with game team order
-        let ev1 = game.evsIfTeam1Wins[ei];
-        let ev2 = game.evsIfTeam2Wins[ei];
-        let opp1Decimal = odds.team2DecimalOdds; // bet on team2 if team1 wins is preferred
-        let opp2Decimal = odds.team1DecimalOdds;
-        let opp1American = odds.team2AmericanOdds;
-        let opp2American = odds.team1AmericanOdds;
-        let opp1Name = game.team2Name;
-        let opp2Name = game.team1Name;
+        const ev1 = game.evsIfTeam1Wins[ei]; // EV if game.team1 wins
+        const ev2 = game.evsIfTeam2Wins[ei]; // EV if game.team2 wins
 
-        // If odds are reversed (team1 in odds = team2 in game), swap
-        if (odds.team1Id === game.team2Id) {
-          [ev1, ev2] = [ev2, ev1];
-          [opp1Decimal, opp2Decimal] = [opp2Decimal, opp1Decimal];
-          [opp1American, opp2American] = [opp2American, opp1American];
-          [opp1Name, opp2Name] = [opp2Name, opp1Name];
-        }
+        // Map game.team1/team2 to the correct odds regardless of ESPN home/away order
+        const t1MatchesOddsTeam1 = odds.team1Id === game.team1Id;
+        const t1Decimal  = t1MatchesOddsTeam1 ? odds.team1DecimalOdds  : odds.team2DecimalOdds;
+        const t1American = t1MatchesOddsTeam1 ? odds.team1AmericanOdds : odds.team2AmericanOdds;
+        const t2Decimal  = t1MatchesOddsTeam1 ? odds.team2DecimalOdds  : odds.team1DecimalOdds;
+        const t2American = t1MatchesOddsTeam1 ? odds.team2AmericanOdds : odds.team1AmericanOdds;
 
-        // Determine which scenario is preferred
+        // Prefer the scenario with higher EV; hedge by betting on the OTHER team
         const [evIfPick, evIfOpp, oppDecimal, oppAmerican, oppName] =
           ev1 >= ev2
-            ? [ev1, ev2, opp1Decimal, opp1American, opp1Name]
-            : [ev2, ev1, opp2Decimal, opp2American, opp2Name];
+            ? [ev1, ev2, t2Decimal, t2American, game.team2Name] // prefer t1 → bet on t2
+            : [ev2, ev1, t1Decimal, t1American, game.team1Name]; // prefer t2 → bet on t1
 
         const evDiff = evIfPick - evIfOpp;
         if (evDiff <= 0) continue;
