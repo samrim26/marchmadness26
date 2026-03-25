@@ -42,14 +42,16 @@ interface EspnEventOdds {
   homeTeamOdds?: { moneyLine?: number };
 }
 
+interface EspnCompetition {
+  date: string;
+  competitors: EspnCompetitor[];
+  // odds live inside competitions[], not at the event level
+  odds?: EspnEventOdds[];
+}
+
 interface EspnEvent {
   id: string;
-  competitions: {
-    date: string;
-    competitors: EspnCompetitor[];
-  }[];
-  // odds live at the EVENT level, not competition level
-  odds?: EspnEventOdds[];
+  competitions: EspnCompetition[];
 }
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
@@ -122,8 +124,11 @@ function parseEvents(events: EspnEvent[]): GameOdds[] {
   const result: GameOdds[] = [];
 
   for (const event of events) {
-    // Odds are at the event level
-    const oddsArr = event.odds;
+    const comp = event.competitions[0];
+    if (!comp) continue;
+
+    // Odds are inside competitions[0].odds[], not at the event level
+    const oddsArr = comp.odds;
     if (!oddsArr || oddsArr.length === 0) continue;
 
     // Prefer DraftKings → ESPN BET → first available
@@ -132,7 +137,7 @@ function parseEvents(events: EspnEvent[]): GameOdds[] {
       oddsArr.find((o) => o.provider?.name?.toLowerCase().includes("espn")) ??
       oddsArr[0];
 
-    // Try new moneyline structure first, fall back to old awayTeamOdds structure
+    // Try moneyline.home/away.close.odds (string) first, fall back to numeric moneyLine
     let awayML: number | null = null;
     let homeML: number | null = null;
 
@@ -144,16 +149,12 @@ function parseEvents(events: EspnEvent[]): GameOdds[] {
         parseAmericanOddsString(oddsEntry.moneyline.home?.close?.odds) ??
         parseAmericanOddsString(oddsEntry.moneyline.home?.current?.odds);
     } else {
-      // Fallback: old structure with numeric moneyLine
       awayML = oddsEntry.awayTeamOdds?.moneyLine ?? null;
       homeML = oddsEntry.homeTeamOdds?.moneyLine ?? null;
     }
 
     if (awayML == null || homeML == null) continue;
 
-    // Team names come from competitions[0].competitors
-    const comp = event.competitions[0];
-    if (!comp) continue;
     const awayComp = comp.competitors.find((c) => c.homeAway === "away");
     const homeComp = comp.competitors.find((c) => c.homeAway === "home");
     if (!awayComp || !homeComp) continue;

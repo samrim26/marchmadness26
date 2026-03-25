@@ -115,7 +115,11 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
       const events: Record<string, unknown>[] = data.events ?? [];
 
       for (const event of events) {
-        const oddsArr = event.odds as Record<string, unknown>[] | undefined;
+        // Odds are inside competitions[0].odds[], NOT at the event level
+        const comp = (event.competitions as Record<string, unknown>[])?.[0];
+        if (!comp) continue;
+
+        const oddsArr = comp.odds as Record<string, unknown>[] | undefined;
         if (!oddsArr || oddsArr.length === 0) continue;
 
         const oddsEntry =
@@ -131,7 +135,7 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
           ) ??
           oddsArr[0];
 
-        // New moneyline structure
+        // moneyline.home.close.odds / moneyline.away.close.odds (strings like "-290")
         const ml = oddsEntry.moneyline as Record<string, unknown> | undefined;
         let awayML: number | null = null;
         let homeML: number | null = null;
@@ -142,15 +146,13 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
           awayML = away?.odds != null ? Number(String(away.odds).replace("+", "")) : null;
           homeML = home?.odds != null ? Number(String(home.odds).replace("+", "")) : null;
         } else {
-          // Fallback: old structure
+          // Fallback: numeric moneyLine field
           awayML = (oddsEntry.awayTeamOdds as Record<string, unknown> | undefined)?.moneyLine as number ?? null;
           homeML = (oddsEntry.homeTeamOdds as Record<string, unknown> | undefined)?.moneyLine as number ?? null;
         }
 
         if (awayML == null || isNaN(awayML) || homeML == null || isNaN(homeML)) continue;
 
-        const comp = (event.competitions as Record<string, unknown>[])?.[0];
-        if (!comp) continue;
         const competitors = comp.competitors as Record<string, unknown>[] | undefined;
         const awayComp = competitors?.find((c) => c.homeAway === "away");
         const homeComp = competitors?.find((c) => c.homeAway === "home");
