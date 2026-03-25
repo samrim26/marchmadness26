@@ -1,8 +1,11 @@
 /**
  * ESPN public scoreboard API — free, no key required, accessible from servers.
- * Returns moneyline odds from ESPN BET (real market prices, updated live).
+ * Returns moneyline odds from DraftKings via ESPN's scoreboard JSON.
  *
- * Docs: undocumented but stable; used by ESPN apps.
+ * Actual response structure (verified 2026-03-25):
+ *   events[i].odds[j].moneyline.home.close.odds  → string e.g. "-290"
+ *   events[i].odds[j].moneyline.away.close.odds  → string e.g. "+235"
+ *   events[i].competitions[0].competitors[]      → home/away team names
  */
 
 import { normalizeTeamName, americanToDecimal } from "@/lib/odds";
@@ -16,7 +19,6 @@ const ESPN_BASE =
 interface EspnTeam {
   shortDisplayName: string;
   displayName: string;
-  abbreviation: string;
 }
 
 interface EspnCompetitor {
@@ -24,28 +26,30 @@ interface EspnCompetitor {
   team: EspnTeam;
 }
 
-interface EspnTeamOdds {
-  moneyLine?: number; // American odds as number, e.g. -150 or 185
-  favorite?: boolean;
+interface EspnMoneylineSide {
+  close?: { odds?: string };
+  current?: { odds?: string };
 }
 
-interface EspnOdds {
+interface EspnEventOdds {
   provider?: { name: string };
-  awayTeamOdds?: EspnTeamOdds;
-  homeTeamOdds?: EspnTeamOdds;
-  moneyLine?: number; // sometimes top-level
-}
-
-interface EspnCompetition {
-  date: string;
-  competitors: EspnCompetitor[];
-  odds?: EspnOdds[];
+  moneyline?: {
+    home?: EspnMoneylineSide;
+    away?: EspnMoneylineSide;
+  };
+  // older/alternate structure some events still use
+  awayTeamOdds?: { moneyLine?: number };
+  homeTeamOdds?: { moneyLine?: number };
 }
 
 interface EspnEvent {
   id: string;
-  name: string;
-  competitions: EspnCompetition[];
+  competitions: {
+    date: string;
+    competitors: EspnCompetitor[];
+  }[];
+  // odds live at the EVENT level, not competition level
+  odds?: EspnEventOdds[];
 }
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
@@ -81,6 +85,13 @@ function upcomingDates(days = 20): string[] {
 
 // ─── Parsing ──────────────────────────────────────────────────────────────────
 
+/** Parse American odds string like "-290" or "+235" → number */
+function parseAmericanOddsString(s: string | undefined): number | null {
+  if (!s) return null;
+  const n = Number(s.replace("+", ""));
+  return isNaN(n) ? null : n;
+}
+
 function buildTeamOdds(
   apiName: string,
   americanOdds: number,
@@ -102,39 +113,53 @@ function parseEvents(events: EspnEvent[]): GameOdds[] {
   const result: GameOdds[] = [];
 
   for (const event of events) {
-    for (const comp of event.competitions) {
-      const oddsArr = comp.odds;
-      if (!oddsArr || oddsArr.length === 0) continue;
+    // Odds are at the event level
+    const oddsArr = event.odds;
+    if (!oddsArr || oddsArr.length === 0) continue;
 
-      // Prefer ESPN BET; fall back to first available
-      const oddsEntry =
-        oddsArr.find((o) => o.provider?.name?.toLowerCase().includes("espn")) ??
-        oddsArr[0];
+    // Prefer DraftKings → ESPN BET → first available
+    const oddsEntry =
+      oddsArr.find((o) => o.provider?.name?.toLowerCase().includes("draft")) ??
+      oddsArr.find((o) => o.provider?.name?.toLowerCase().includes("espn")) ??
+      oddsArr[0];
 
-      const awayMoneyLine = oddsEntry.awayTeamOdds?.moneyLine;
-      const homeMoneyLine = oddsEntry.homeTeamOdds?.moneyLine;
+    // Try new moneyline structure first, fall back to old awayTeamOdds structure
+    let awayML: number | null = null;
+    let homeML: number | null = null;
 
-      if (awayMoneyLine == null || homeMoneyLine == null) continue;
-
-      // competitors: one "away", one "home"
-      const awayComp = comp.competitors.find((c) => c.homeAway === "away");
-      const homeComp = comp.competitors.find((c) => c.homeAway === "home");
-      if (!awayComp || !homeComp) continue;
-
-      const awayName =
-        awayComp.team.shortDisplayName || awayComp.team.displayName;
-      const homeName =
-        homeComp.team.shortDisplayName || homeComp.team.displayName;
-      const bookmaker = oddsEntry.provider?.name ?? "ESPN BET";
-
-      result.push({
-        gameId: null,
-        apiMatchId: event.id,
-        commenceTime: comp.date,
-        team1: buildTeamOdds(awayName, awayMoneyLine, bookmaker),
-        team2: buildTeamOdds(homeName, homeMoneyLine, bookmaker),
-      });
+    if (oddsEntry.moneyline) {
+      awayML =
+        parseAmericanOddsString(oddsEntry.moneyline.away?.close?.odds) ??
+        parseAmericanOddsString(oddsEntry.moneyline.away?.current?.odds);
+      homeML =
+        parseAmericanOddsString(oddsEntry.moneyline.home?.close?.odds) ??
+        parseAmericanOddsString(oddsEntry.moneyline.home?.current?.odds);
+    } else {
+      // Fallback: old structure with numeric moneyLine
+      awayML = oddsEntry.awayTeamOdds?.moneyLine ?? null;
+      homeML = oddsEntry.homeTeamOdds?.moneyLine ?? null;
     }
+
+    if (awayML == null || homeML == null) continue;
+
+    // Team names come from competitions[0].competitors
+    const comp = event.competitions[0];
+    if (!comp) continue;
+    const awayComp = comp.competitors.find((c) => c.homeAway === "away");
+    const homeComp = comp.competitors.find((c) => c.homeAway === "home");
+    if (!awayComp || !homeComp) continue;
+
+    const awayName = awayComp.team.shortDisplayName || awayComp.team.displayName;
+    const homeName = homeComp.team.shortDisplayName || homeComp.team.displayName;
+    const bookmaker = oddsEntry.provider?.name ?? "DraftKings";
+
+    result.push({
+      gameId: null,
+      apiMatchId: event.id,
+      commenceTime: comp.date,
+      team1: buildTeamOdds(awayName, awayML, bookmaker),
+      team2: buildTeamOdds(homeName, homeML, bookmaker),
+    });
   }
 
   return result;
@@ -150,7 +175,6 @@ export interface EspnOddsResult {
 /**
  * Fetch upcoming NCAAB moneylines from ESPN's public scoreboard API.
  * Scans the next 20 days to cover Sweet 16 → Championship.
- * Returns only games where both teams match our bracket teams.
  */
 export async function fetchEspnOdds(): Promise<EspnOddsResult> {
   try {
@@ -170,7 +194,7 @@ export async function fetchEspnOdds(): Promise<EspnOddsResult> {
       return {
         odds: [],
         error:
-          "ESPN returned games but none had odds posted yet. Lines typically appear 24-48h before tip-off.",
+          "ESPN returned games but moneyline odds aren't posted yet. Check back closer to tip-off.",
       };
     }
 
