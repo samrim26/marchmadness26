@@ -86,19 +86,21 @@ export default async function HedgingPage() {
       <div className="rounded-xl border border-blue-800/30 bg-blue-900/10 p-5 text-sm space-y-2">
         <div className="font-semibold text-blue-300 mb-1">How hedging works</div>
         <p className="text-slate-300">
-          You paid $20 to enter. If your bracket wins, you net +$160. If it loses, you're down $20.
-          A hedge bet at a sportsbook on the <em>opposing team</em> locks in a floor — you sacrifice
-          some upside to eliminate the downside.
+          Each number here is a <strong className="text-white">pool expected value</strong> — your
+          average net dollar outcome across all remaining bracket scenarios. A single game can swing
+          that EV dramatically depending on how pivotal it is to your picks.
         </p>
         <p className="text-slate-400">
-          <strong className="text-white">Formula:</strong> Bet H = (EV if your pick wins − EV if
-          your pick loses) ÷ opponent's decimal odds. This equalises both outcomes and locks in a
-          guaranteed floor.
+          A hedge bet at a sportsbook on the opposing team <em>equalises</em> your pool EV for both
+          outcomes of that game — so no matter who wins, your expected position in the pool stays the same.
+          It does <strong className="text-white">not</strong> guarantee you win the pool; remaining
+          games still determine the actual payout.
         </p>
         <p className="text-slate-400">
-          A hedge is worth taking when the{" "}
-          <strong className="text-white">guaranteed floor &gt; $0</strong> (you make money no matter
-          what).
+          <strong className="text-white">Formula:</strong> Bet H = (EV if pick wins − EV if pick
+          loses) ÷ opponent's decimal odds. A hedge makes sense when the{" "}
+          <strong className="text-white">locked EV &gt; $0</strong>, meaning your bracket has
+          positive expected value regardless of this game.
         </p>
       </div>
 

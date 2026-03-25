@@ -376,7 +376,7 @@ export default function HedgingClient({
                     <span className="text-blue-300">{am}</span> on {h.bookmaker}
                   </span>
                   <span className="text-emerald-400 font-semibold">
-                    → locks in +${h.guaranteedFloor} no matter what
+                    → pool EV stays at +${h.guaranteedFloor} regardless of this game
                   </span>
                 </div>
               );
@@ -445,25 +445,35 @@ export default function HedgingClient({
                 {/* Two outcome comparison */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg bg-slate-900/60 p-3 space-y-1">
-                    <div className="text-xs text-slate-500 uppercase tracking-wider">If you hedge</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Pool EV after hedge</div>
                     <div className={`text-2xl font-bold tabular-nums ${(withHedge ?? 0) > 0 ? "text-emerald-400" : "text-orange-400"}`}>
                       {(withHedge ?? 0) >= 0 ? "+" : ""}${withHedge}
                     </div>
-                    <div className="text-xs text-slate-400">guaranteed — either outcome</div>
+                    <div className="text-xs text-slate-400">same regardless of this game</div>
                   </div>
                   <div className="rounded-lg bg-slate-900/60 p-3 space-y-1">
-                    <div className="text-xs text-slate-500 uppercase tracking-wider">If you don't hedge</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Pool EV without hedge</div>
                     <div className={`text-2xl font-bold tabular-nums ${(withoutHedge ?? 0) >= 0 ? "text-slate-300" : "text-red-400"}`}>
                       {(withoutHedge ?? 0) >= 0 ? "+" : ""}${withoutHedge}
                     </div>
-                    <div className="text-xs text-slate-400">expected (ranges widely)</div>
+                    <div className="text-xs text-slate-400">average of two scenarios</div>
                   </div>
                 </div>
 
                 {/* Range detail */}
                 <div className="text-xs text-slate-500 border-t border-slate-700/50 pt-2 space-y-0.5">
-                  <div>Without hedge: ranges from <span className="text-slate-300">{best.poolEVIfPickLoses >= 0 ? "+" : ""}${best.poolEVIfPickLoses}</span> (pick loses) to <span className="text-slate-300">{best.poolEVIfPickWins >= 0 ? "+" : ""}${best.poolEVIfPickWins}</span> (pick wins)</div>
-                  <div>With hedge: exactly <span className={hasOpportunity ? "text-emerald-400" : "text-slate-300"}>{best.guaranteedFloor >= 0 ? "+" : ""}${best.guaranteedFloor}</span> either way</div>
+                  <div>
+                    Without hedge: pool EV swings from{" "}
+                    <span className="text-slate-300">{best.poolEVIfPickLoses >= 0 ? "+" : ""}${best.poolEVIfPickLoses}</span>{" "}
+                    if pick loses to{" "}
+                    <span className="text-slate-300">{best.poolEVIfPickWins >= 0 ? "+" : ""}${best.poolEVIfPickWins}</span>{" "}
+                    if pick wins
+                  </div>
+                  <div>
+                    With hedge: pool EV locked at{" "}
+                    <span className={hasOpportunity ? "text-emerald-400" : "text-slate-300"}>{best.guaranteedFloor >= 0 ? "+" : ""}${best.guaranteedFloor}</span>{" "}
+                    — remaining games still determine actual payout
+                  </div>
                 </div>
               </div>
             )}
