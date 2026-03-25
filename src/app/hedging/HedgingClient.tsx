@@ -15,6 +15,10 @@ export interface SerializedGame {
   evsIfTeam1Wins: number[];
   /** Pool EV per entry if team2 wins. Index matches entries array. */
   evsIfTeam2Wins: number[];
+  /** P(entry wins pool | team1 wins this game), per entry index. */
+  pWinIfTeam1Wins: number[];
+  /** P(entry wins pool | team2 wins this game), per entry index. */
+  pWinIfTeam2Wins: number[];
 }
 
 export interface SerializedEntry {
@@ -190,6 +194,9 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
 
 // ─── Hedge computation from pre-computed EVs ─────────────────────────────────
 
+// Decisiveness threshold: game must swing win probability by at least this much
+const DECISIVE_THRESHOLD = 0.15;
+
 interface HedgeBet {
   gameLabel: string;
   betOnTeamName: string;
@@ -200,6 +207,12 @@ interface HedgeBet {
   poolEVIfPickWins: number;
   poolEVIfPickLoses: number;
   bookmaker: string;
+  /** True when picking the right outcome nearly guarantees a win and wrong outcome nearly guarantees out */
+  isCashGuarantee: boolean;
+  /** P(this entry wins pool) if the favoured pick wins */
+  pWinIfPick: number;
+  /** P(this entry wins pool) if the opposing team wins */
+  pWinIfOpp: number;
 }
 
 interface PersonHedge {
@@ -242,6 +255,10 @@ function computeHedges(
         const ev1 = game.evsIfTeam1Wins[ei]; // EV if game.team1 wins
         const ev2 = game.evsIfTeam2Wins[ei]; // EV if game.team2 wins
 
+        // Win probabilities conditional on each outcome
+        const pWin1 = game.pWinIfTeam1Wins[ei];
+        const pWin2 = game.pWinIfTeam2Wins[ei];
+
         // Map game.team1/team2 to the correct odds regardless of ESPN home/away order
         const t1MatchesOddsTeam1 = odds.team1Id === game.team1Id;
         const t1Decimal  = t1MatchesOddsTeam1 ? odds.team1DecimalOdds  : odds.team2DecimalOdds;
@@ -250,16 +267,23 @@ function computeHedges(
         const t2American = t1MatchesOddsTeam1 ? odds.team2AmericanOdds : odds.team1AmericanOdds;
 
         // Prefer the scenario with higher EV; hedge by betting on the OTHER team
-        const [evIfPick, evIfOpp, oppDecimal, oppAmerican, oppName] =
+        const [evIfPick, evIfOpp, oppDecimal, oppAmerican, oppName, pWinIfPick, pWinIfOpp] =
           ev1 >= ev2
-            ? [ev1, ev2, t2Decimal, t2American, game.team2Name] // prefer t1 → bet on t2
-            : [ev2, ev1, t1Decimal, t1American, game.team1Name]; // prefer t2 → bet on t1
+            ? [ev1, ev2, t2Decimal, t2American, game.team2Name, pWin1, pWin2] // prefer t1 → bet on t2
+            : [ev2, ev1, t1Decimal, t1American, game.team1Name, pWin2, pWin1]; // prefer t2 → bet on t1
 
         const evDiff = evIfPick - evIfOpp;
         if (evDiff <= 0) continue;
 
+        // Decisiveness check: skip if game doesn't meaningfully swing win probability
+        const winProbSwing = pWinIfPick - pWinIfOpp;
+        if (winProbSwing < DECISIVE_THRESHOLD) continue;
+
         const H = evDiff / oppDecimal;
         const floor = evIfPick - H;
+
+        // Cash guarantee: picking right nearly locks a win, picking wrong nearly locks a loss
+        const isCashGuarantee = pWinIfPick > 0.85 && pWinIfOpp < 0.05;
 
         allHedges.push({
           gameLabel: `${game.gameLabel} (${entry.displayName})`,
@@ -271,6 +295,9 @@ function computeHedges(
           poolEVIfPickWins: Math.round(evIfPick * 100) / 100,
           poolEVIfPickLoses: Math.round(evIfOpp * 100) / 100,
           bookmaker: odds.bookmaker,
+          isCashGuarantee,
+          pWinIfPick,
+          pWinIfOpp,
         });
       }
     }
@@ -361,7 +388,7 @@ export default function HedgingClient({
       {positiveHedges.length > 0 && (
         <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/10 p-5 space-y-3">
           <div className="text-sm font-semibold text-emerald-300 uppercase tracking-wider">
-            Guaranteed profit available right now
+            Guaranteed cash available right now
           </div>
           <div className="space-y-2">
             {positiveHedges.map((p) => {
@@ -375,9 +402,15 @@ export default function HedgingClient({
                     <span className="font-semibold text-white">{h.betOnTeamName}</span> at{" "}
                     <span className="text-blue-300">{am}</span> on {h.bookmaker}
                   </span>
-                  <span className="text-emerald-400 font-semibold">
-                    → pool EV stays at +${h.guaranteedFloor} regardless of this game
-                  </span>
+                  {h.isCashGuarantee ? (
+                    <span className="text-emerald-400 font-semibold">
+                      → Guaranteed cash: Walk away with at least +${h.guaranteedFloor} regardless of this game
+                    </span>
+                  ) : (
+                    <span className="text-emerald-400 font-semibold">
+                      → pool EV stays at +${h.guaranteedFloor} regardless of this game
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -387,7 +420,7 @@ export default function HedgingClient({
 
       {positiveHedges.length === 0 && (
         <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center text-slate-400">
-          No guaranteed positive-floor hedge opportunities at current odds. Check back as lines move.
+          No pivotal hedge opportunities at current odds. Check back as lines move or as decisive games approach.
         </div>
       )}
 
@@ -399,7 +432,7 @@ export default function HedgingClient({
           ? best.americanOdds > 0 ? `+${best.americanOdds}` : `${best.americanOdds}`
           : "";
 
-        // Without hedge: rough expected outcome (50/50 assumption)
+        // Without hedge: rough expected outcome (probability-weighted)
         const withoutHedge = best ? best.evIfNoBet : null;
         // With hedge: guaranteed no matter what
         const withHedge = best ? best.guaranteedFloor : null;
@@ -442,6 +475,27 @@ export default function HedgingClient({
                   <div className="text-xs text-slate-500 mt-0.5">{best.gameLabel}</div>
                 </div>
 
+                {/* Cash guarantee / decisiveness banner */}
+                {best.isCashGuarantee ? (
+                  <div className="rounded-md bg-emerald-900/30 border border-emerald-700/40 px-3 py-2 text-sm text-emerald-300 font-medium">
+                    Guaranteed cash: Walk away with at least +${best.guaranteedFloor} — pick wins (
+                    {(best.pWinIfPick * 100).toFixed(0)}% pool win chance) or loses (
+                    {(best.pWinIfOpp * 100).toFixed(0)}% pool win chance)
+                  </div>
+                ) : (
+                  <div className="rounded-md bg-blue-900/20 border border-blue-800/30 px-3 py-2 text-sm text-blue-300">
+                    Reduces your swing from [
+                    <span className="font-medium">{best.poolEVIfPickLoses >= 0 ? "+" : ""}${best.poolEVIfPickLoses}</span>
+                    {" to "}
+                    <span className="font-medium">{best.poolEVIfPickWins >= 0 ? "+" : ""}${best.poolEVIfPickWins}</span>]
+                    {" down to "}
+                    <span className="font-medium text-white">${best.guaranteedFloor >= 0 ? "+" : ""}{best.guaranteedFloor} floor</span>
+                    {" — win probability swings "}
+                    <span className="font-medium">{(best.pWinIfOpp * 100).toFixed(0)}%→{(best.pWinIfPick * 100).toFixed(0)}%</span>
+                    {" on this game"}
+                  </div>
+                )}
+
                 {/* Two outcome comparison */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg bg-slate-900/60 p-3 space-y-1">
@@ -456,7 +510,7 @@ export default function HedgingClient({
                     <div className={`text-2xl font-bold tabular-nums ${(withoutHedge ?? 0) >= 0 ? "text-slate-300" : "text-red-400"}`}>
                       {(withoutHedge ?? 0) >= 0 ? "+" : ""}${withoutHedge}
                     </div>
-                    <div className="text-xs text-slate-400">average of two scenarios</div>
+                    <div className="text-xs text-slate-400">probability-weighted average</div>
                   </div>
                 </div>
 
@@ -495,6 +549,9 @@ export default function HedgingClient({
                           <span className={h.guaranteedFloor > 0 ? "text-emerald-400" : "text-red-400"}>
                             {h.guaranteedFloor >= 0 ? "+" : ""}${h.guaranteedFloor}
                           </span>
+                          {h.isCashGuarantee && (
+                            <span className="ml-1 text-emerald-400 text-xs">(cash lock)</span>
+                          )}
                         </span>
                       </div>
                     );
@@ -504,7 +561,7 @@ export default function HedgingClient({
             )}
 
             {person.hedges.length === 0 && (
-              <p className="text-sm text-slate-500">No matching odds found for upcoming games.</p>
+              <p className="text-sm text-slate-500">No pivotal hedge opportunities found — either no matching odds or games aren't decisive enough (&lt;15% win probability swing).</p>
             )}
           </div>
         );

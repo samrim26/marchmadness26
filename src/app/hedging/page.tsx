@@ -6,7 +6,8 @@ import { getResults } from "@/lib/getResults";
 import { PRIZE_CONFIG, parseBracketName } from "@/data/prizeConfig";
 import { getGamesWithKnownParticipants, getGameParticipant } from "@/lib/bracket";
 import { getTeamName } from "@/data/teams";
-import { computeEntryProbabilities, buildOutcomeRowsForState, conditionalPoolEVs } from "@/lib/simulation";
+import { computeEntryProbabilities, buildOutcomeRowsForState, conditionalPoolEVs, computeConditionalWinProbs } from "@/lib/simulation";
+import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
 import HedgingClient from "./HedgingClient";
 import type { SerializedGame, SerializedEntry } from "./HedgingClient";
 
@@ -18,10 +19,13 @@ export const dynamic = "force-dynamic";
 
 export default async function HedgingPage() {
   const RESULTS = await getResults();
-  const analytics = computeEntryProbabilities(ENTRIES, GAMES, RESULTS, SCORING_SETTINGS);
+  const manualOdds = await getManualOdds();
+  const gameProbs = manualOddsToGameProbs(manualOdds, GAMES, RESULTS);
+
+  const analytics = computeEntryProbabilities(ENTRIES, GAMES, RESULTS, SCORING_SETTINGS, gameProbs);
 
   // Pre-compute conditional EVs server-side (expensive enumeration stays on server)
-  const outcomeRows = buildOutcomeRowsForState(ENTRIES, GAMES, RESULTS);
+  const outcomeRows = buildOutcomeRowsForState(ENTRIES, GAMES, RESULTS, gameProbs);
   const overallEVs = conditionalPoolEVs(outcomeRows, ENTRIES.length);
 
   const upcomingGames = getGamesWithKnownParticipants(GAMES, RESULTS);
@@ -40,6 +44,8 @@ export default async function HedgingPage() {
       team2Name: getTeamName(t2),
       evsIfTeam1Wins: conditionalPoolEVs(rowsIfT1, ENTRIES.length),
       evsIfTeam2Wins: conditionalPoolEVs(rowsIfT2, ENTRIES.length),
+      pWinIfTeam1Wins: computeConditionalWinProbs(rowsIfT1, ENTRIES.length),
+      pWinIfTeam2Wins: computeConditionalWinProbs(rowsIfT2, ENTRIES.length),
     };
   });
 

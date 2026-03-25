@@ -10,6 +10,7 @@ import { computeScenarioDeltas } from "@/lib/rooting";
 import { computeEntryProbabilities } from "@/lib/simulation";
 import { getGamesWithKnownParticipants, getGameParticipant } from "@/lib/bracket";
 import { formatPercent } from "@/lib/format";
+import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
 
 export const metadata: Metadata = {
   title: "Scenarios | March Madness 2026",
@@ -17,13 +18,16 @@ export const metadata: Metadata = {
 
 export default async function ScenariosPage() {
   const RESULTS = await getResults();
+  const manualOdds = await getManualOdds();
+  const gameProbs = manualOddsToGameProbs(manualOdds, GAMES, RESULTS);
   const analytics = computeEntryProbabilities(
     ENTRIES,
     GAMES,
     RESULTS,
-    SCORING_SETTINGS
+    SCORING_SETTINGS,
+    gameProbs
   );
-  const deltas = computeScenarioDeltas(ENTRIES, GAMES, RESULTS, SCORING_SETTINGS);
+  const deltas = computeScenarioDeltas(ENTRIES, GAMES, RESULTS, SCORING_SETTINGS, gameProbs);
 
   // Group deltas by game
   const byGame = new Map<string, typeof deltas>();

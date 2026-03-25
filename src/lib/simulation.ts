@@ -1,5 +1,5 @@
 import type { Entry, EntryAnalytics, Game, Results, ScoringSettings } from "@/lib/types";
-import { sortGamesByRound, getRemainingGames } from "@/lib/bracket";
+import { sortGamesByRound, getRemainingGames, getGameParticipant } from "@/lib/bracket";
 import { scoreEntryAgainstOutcome, calculateCurrentScore, calculateMaxPossibleScore } from "@/lib/scoring";
 
 // ─── Enumeration ─────────────────────────────────────────────────────────────
@@ -58,23 +58,67 @@ export function enumerateAllValidOutcomes(
 
 // ─── Pre-computed outcome scores ─────────────────────────────────────────────
 
-interface OutcomeRow {
+export interface OutcomeRow {
   outcome: Results;
   scores: number[]; // index matches entries array
   maxScore: number;
+  weight: number; // probability weight for this outcome (default 1.0)
+}
+
+/**
+ * Compute the probability weight for a given outcome as the product of
+ * P(winner) for each remaining game. Uses gameProbs if available, else 0.5.
+ */
+function computeOutcomeWeight(
+  outcome: Results,
+  games: Game[],
+  gameProbs: Record<string, { t1Prob: number; t2Prob: number }>
+): number {
+  let weight = 1.0;
+  for (const game of games) {
+    const winner = outcome[game.id];
+    if (!winner) continue; // already decided before enumeration
+
+    const probs = gameProbs[game.id];
+    if (!probs) {
+      weight *= 0.5;
+      continue;
+    }
+
+    // Determine which slot the winner occupies
+    // We need to figure out if winner is team1 or team2 of this game
+    // The outcome map has the winner; we need to compare against participants
+    // We can't use getGameParticipant with the partial outcome here, but since
+    // we're iterating outcomes (fully resolved), we check the game's direct IDs
+    // or fall back to source game results.
+    const t1 = game.team1Id ?? outcome[game.team1SourceGameId!];
+    const t2 = game.team2Id ?? outcome[game.team2SourceGameId!];
+
+    if (winner === t1) {
+      weight *= probs.t1Prob;
+    } else if (winner === t2) {
+      weight *= probs.t2Prob;
+    } else {
+      weight *= 0.5; // fallback
+    }
+  }
+  return weight;
 }
 
 function buildOutcomeRows(
   outcomes: Results[],
   entries: Entry[],
-  games: Game[]
+  games: Game[],
+  gameProbs?: Record<string, { t1Prob: number; t2Prob: number }>
 ): OutcomeRow[] {
+  const resolvedProbs = gameProbs ?? {};
   return outcomes.map((outcome) => {
     const scores = entries.map((e) =>
       scoreEntryAgainstOutcome(e, games, outcome)
     );
     const maxScore = Math.max(...scores);
-    return { outcome, scores, maxScore };
+    const weight = computeOutcomeWeight(outcome, games, resolvedProbs);
+    return { outcome, scores, maxScore, weight };
   });
 }
 
@@ -84,7 +128,8 @@ export function computeEntryProbabilities(
   entries: Entry[],
   games: Game[],
   results: Results,
-  settings: ScoringSettings
+  settings: ScoringSettings,
+  gameProbs?: Record<string, { t1Prob: number; t2Prob: number }>
 ): EntryAnalytics[] {
   const outcomes = enumerateAllValidOutcomes(games, results);
   const n = outcomes.length;
@@ -110,14 +155,20 @@ export function computeEntryProbabilities(
     }));
   }
 
-  const rows = buildOutcomeRows(outcomes, entries, games);
+  const rows = buildOutcomeRows(outcomes, entries, games, gameProbs);
+  const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
 
   const soloWins = new Array(entries.length).fill(0);
   const tieWins = new Array(entries.length).fill(0);
   const secondPlace = new Array(entries.length).fill(0);
 
+  // Raw scenario counts (unweighted) for display purposes
+  const soloWinCount = new Array(entries.length).fill(0);
+  const tieWinCount = new Array(entries.length).fill(0);
+  const secondPlaceCount = new Array(entries.length).fill(0);
+
   for (const row of rows) {
-    const { scores, maxScore } = row;
+    const { scores, maxScore, weight } = row;
     const tied = scores.filter((s) => s === maxScore).length;
 
     // Find second-place score (highest score that isn't first place)
@@ -125,10 +176,16 @@ export function computeEntryProbabilities(
 
     for (let i = 0; i < entries.length; i++) {
       if (scores[i] === maxScore) {
-        if (tied === 1) soloWins[i]++;
-        else tieWins[i]++;
+        if (tied === 1) {
+          soloWins[i] += weight;
+          soloWinCount[i]++;
+        } else {
+          tieWins[i] += weight;
+          tieWinCount[i]++;
+        }
       } else if (secondMax !== -Infinity && scores[i] === secondMax) {
-        secondPlace[i]++;
+        secondPlace[i] += weight;
+        secondPlaceCount[i]++;
       }
     }
   }
@@ -138,8 +195,8 @@ export function computeEntryProbabilities(
   const NET_OUT = -20;     // net if out (lose entry fee)
 
   const analytics: EntryAnalytics[] = entries.map((entry, i) => {
-    const pFirst = (soloWins[i] + tieWins[i]) / n;
-    const pSecond = secondPlace[i] / n;
+    const pFirst = (soloWins[i] + tieWins[i]) / totalWeight;
+    const pSecond = secondPlace[i] / totalWeight;
     const pOut = 1 - pFirst - pSecond;
     const poolEV = pFirst * NET_FIRST + pSecond * NET_SECOND + pOut * NET_OUT;
     return {
@@ -147,16 +204,16 @@ export function computeEntryProbabilities(
       displayName: entry.displayName,
       currentScore: calculateCurrentScore(entry, games, results),
       maxPossibleScore: calculateMaxPossibleScore(entry, games, results),
-      soloWinProbability: soloWins[i] / n,
-      tieForFirstProbability: tieWins[i] / n,
+      soloWinProbability: soloWins[i] / totalWeight,
+      tieForFirstProbability: tieWins[i] / totalWeight,
       firstOrTieProbability: pFirst,
       secondPlaceProbability: pSecond,
       poolEV,
-      numberOfWinningScenarios: soloWins[i],
-      numberOfTieScenarios: tieWins[i],
-      numberOfSecondPlaceScenarios: secondPlace[i],
+      numberOfWinningScenarios: soloWinCount[i],
+      numberOfTieScenarios: tieWinCount[i],
+      numberOfSecondPlaceScenarios: secondPlaceCount[i],
       totalScenarios: n,
-      eliminated: soloWins[i] + tieWins[i] === 0,
+      eliminated: soloWinCount[i] + tieWinCount[i] === 0,
       rank: 0, // assigned after sort
     };
   });
@@ -180,6 +237,7 @@ export function computeEntryProbabilities(
 /**
  * Given pre-computed outcome rows, compute each entry's firstOrTieProbability
  * within the subset of outcomes where the specified game has a specific winner.
+ * Uses row weights for probability-accurate results.
  */
 export function conditionalProbs(
   rows: OutcomeRow[],
@@ -190,19 +248,22 @@ export function conditionalProbs(
   const filtered = rows.filter((r) => r.outcome[gameId] === winnerId);
   if (filtered.length === 0) return new Array(entryCount).fill(0);
 
-  const counts = new Array(entryCount).fill(0);
+  const totalWeight = filtered.reduce((s, r) => s + r.weight, 0);
+  if (totalWeight === 0) return new Array(entryCount).fill(0);
+
+  const weightedCounts = new Array(entryCount).fill(0);
   for (const row of filtered) {
-    const { scores, maxScore } = row;
+    const { scores, maxScore, weight } = row;
     for (let i = 0; i < entryCount; i++) {
-      if (scores[i] === maxScore) counts[i]++;
+      if (scores[i] === maxScore) weightedCounts[i] += weight;
     }
   }
-  return counts.map((c) => c / filtered.length);
+  return weightedCounts.map((c) => c / totalWeight);
 }
 
 /**
  * For a subset of outcome rows (already filtered by a condition, e.g. "team X wins game G"),
- * compute each entry's pool EV.
+ * compute each entry's pool EV using weighted probabilities.
  *
  * Returns array of EVs indexed by entry position.
  */
@@ -215,30 +276,55 @@ export function conditionalPoolEVs(
 ): number[] {
   if (rows.length === 0) return new Array(entryCount).fill(NET_OUT);
 
-  const firstCounts = new Array(entryCount).fill(0);
-  const secondCounts = new Array(entryCount).fill(0);
-  const n = rows.length;
+  const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
+  if (totalWeight === 0) return new Array(entryCount).fill(NET_OUT);
+
+  const firstWeights = new Array(entryCount).fill(0);
+  const secondWeights = new Array(entryCount).fill(0);
 
   for (const row of rows) {
-    const { scores, maxScore } = row;
-    const tied = scores.filter((s) => s === maxScore).length;
+    const { scores, maxScore, weight } = row;
     const secondMax = Math.max(...scores.filter((s) => s < maxScore), -Infinity);
 
     for (let i = 0; i < entryCount; i++) {
       if (scores[i] === maxScore) {
-        firstCounts[i]++;
+        firstWeights[i] += weight;
       } else if (secondMax !== -Infinity && scores[i] === secondMax) {
-        secondCounts[i]++;
+        secondWeights[i] += weight;
       }
     }
   }
 
   return Array.from({ length: entryCount }, (_, i) => {
-    const pFirst = firstCounts[i] / n;
-    const pSecond = secondCounts[i] / n;
+    const pFirst = firstWeights[i] / totalWeight;
+    const pSecond = secondWeights[i] / totalWeight;
     const pOut = 1 - pFirst - pSecond;
     return pFirst * NET_FIRST + pSecond * NET_SECOND + pOut * NET_OUT;
   });
+}
+
+/**
+ * Given a subset of outcome rows (filtered by some condition),
+ * compute per-entry P(entry wins or ties first) using weighted rows.
+ * Returns array of probabilities indexed by entry position.
+ */
+export function computeConditionalWinProbs(
+  rows: OutcomeRow[],
+  entryCount: number
+): number[] {
+  if (rows.length === 0) return new Array(entryCount).fill(0);
+
+  const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
+  if (totalWeight === 0) return new Array(entryCount).fill(0);
+
+  const weightedWins = new Array(entryCount).fill(0);
+  for (const row of rows) {
+    const { scores, maxScore, weight } = row;
+    for (let i = 0; i < entryCount; i++) {
+      if (scores[i] === maxScore) weightedWins[i] += weight;
+    }
+  }
+  return weightedWins.map((w) => w / totalWeight);
 }
 
 /**
@@ -267,8 +353,9 @@ export function getWinningOutcomes(
 export function buildOutcomeRowsForState(
   entries: Entry[],
   games: Game[],
-  results: Results
+  results: Results,
+  gameProbs?: Record<string, { t1Prob: number; t2Prob: number }>
 ): OutcomeRow[] {
   const outcomes = enumerateAllValidOutcomes(games, results);
-  return buildOutcomeRows(outcomes, entries, games);
+  return buildOutcomeRows(outcomes, entries, games, gameProbs);
 }

@@ -17,6 +17,7 @@ import {
   conditionalProbs,
 } from "@/lib/simulation";
 import { getTeamName } from "@/data/teams";
+import type { GameProbs } from "@/lib/manualOdds";
 
 // ─── Rooting strength classification ─────────────────────────────────────────
 
@@ -40,7 +41,8 @@ export function getAllRootingData(
   entries: Entry[],
   games: Game[],
   results: Results,
-  _settings: ScoringSettings
+  _settings: ScoringSettings,
+  gameProbs?: GameProbs
 ): EntryRootingData[] {
   const actionableGames = getGamesWithKnownParticipants(games, results);
 
@@ -54,7 +56,7 @@ export function getAllRootingData(
   }
 
   // Enumerate outcomes once
-  const rows = buildOutcomeRowsForState(entries, games, results);
+  const rows = buildOutcomeRowsForState(entries, games, results, gameProbs);
   const n = entries.length;
 
   // For each game, compute conditional probs for each possible winner
@@ -134,23 +136,24 @@ export function computeScenarioDeltas(
   entries: Entry[],
   games: Game[],
   results: Results,
-  _settings: ScoringSettings
+  _settings: ScoringSettings,
+  gameProbs?: GameProbs
 ): ScenarioDelta[] {
   const actionableGames = getGamesWithKnownParticipants(games, results);
   if (actionableGames.length === 0) return [];
 
-  const rows = buildOutcomeRowsForState(entries, games, results);
+  const rows = buildOutcomeRowsForState(entries, games, results, gameProbs);
   const n = entries.length;
 
-  // Baseline probabilities
+  // Weighted baseline probabilities
+  const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
   const baseTotals = rows[0]?.scores.map(() => 0) ?? new Array(n).fill(0);
-  let totalRows = rows.length;
   for (const row of rows) {
     for (let i = 0; i < n; i++) {
-      if (row.scores[i] === row.maxScore) baseTotals[i]++;
+      if (row.scores[i] === row.maxScore) baseTotals[i] += row.weight;
     }
   }
-  const baseProbs = baseTotals.map((c) => c / totalRows);
+  const baseProbs = baseTotals.map((c) => c / (totalWeight || 1));
 
   const deltas: ScenarioDelta[] = [];
 
