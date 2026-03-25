@@ -14,12 +14,12 @@ const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 // The Odds API uses full official names; we use short IDs.
 const TEAM_NAME_MAP: Record<string, string[]> = {
   duke: ["Duke", "Duke Blue Devils"],
-  stjohns: ["St. John's", "St John's", "St. John's Red Storm", "St Johns"],
-  michiganstate: ["Michigan State", "Michigan State Spartans"],
-  uconn: ["Connecticut", "UConn", "Connecticut Huskies"],
+  stjohns: ["St. John's", "St John's", "St. John's Red Storm", "St Johns", "St. John\u2019s", "St John\u2019s"],
+  michiganstate: ["Michigan State", "Michigan State Spartans", "Michigan St", "Michigan St.", "Michigan St Spartans"],
+  uconn: ["Connecticut", "UConn", "Connecticut Huskies", "UCONN"],
   iowa: ["Iowa", "Iowa Hawkeyes"],
   nebraska: ["Nebraska", "Nebraska Cornhuskers"],
-  illinois: ["Illinois", "Illinois Fighting Illini"],
+  illinois: ["Illinois", "Illinois Fighting Illini", "Ill. Fighting Illini"],
   houston: ["Houston", "Houston Cougars"],
   arizona: ["Arizona", "Arizona Wildcats"],
   arkansas: ["Arkansas", "Arkansas Razorbacks"],
@@ -27,8 +27,8 @@ const TEAM_NAME_MAP: Record<string, string[]> = {
   purdue: ["Purdue", "Purdue Boilermakers"],
   michigan: ["Michigan", "Michigan Wolverines"],
   alabama: ["Alabama", "Alabama Crimson Tide"],
-  tennessee: ["Tennessee", "Tennessee Volunteers"],
-  iowastate: ["Iowa State", "Iowa State Cyclones"],
+  tennessee: ["Tennessee", "Tennessee Volunteers", "Tennessee Vols"],
+  iowastate: ["Iowa State", "Iowa State Cyclones", "Iowa St", "Iowa St.", "Iowa St Cyclones"],
 };
 
 // Reverse map: "Duke Blue Devils" → "duke"

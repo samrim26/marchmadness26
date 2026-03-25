@@ -166,22 +166,15 @@ export async function fetchEspnOdds(): Promise<EspnOddsResult> {
 
     const parsed = parseEvents(allEvents);
 
-    // Filter to games where at least one team is in our bracket
-    const relevant = parsed.filter(
-      (g) =>
-        g.team1.teamId !== g.team1.teamName || // normalized (known team)
-        g.team2.teamId !== g.team2.teamName
-    );
-
-    if (relevant.length === 0) {
+    if (parsed.length === 0) {
       return {
         odds: [],
         error:
-          "ESPN returned games but none matched our bracket teams. Lines may not be posted yet.",
+          "ESPN returned games but none had odds posted yet. Lines typically appear 24-48h before tip-off.",
       };
     }
 
-    return { odds: relevant, error: null };
+    return { odds: parsed, error: null };
   } catch (e) {
     return { odds: null, error: String(e) };
   }
