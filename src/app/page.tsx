@@ -6,6 +6,7 @@ import { getTeamName } from "@/data/teams";
 import { getRemainingGames, getCompletedGames, getGamesWithKnownParticipants } from "@/lib/bracket";
 import { computeEntryProbabilities } from "@/lib/simulation";
 import { getResults } from "@/lib/getResults";
+import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
 import { formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GameCard } from "@/components/GameCard";
@@ -14,11 +15,14 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const RESULTS = await getResults();
+  const manualOdds = await getManualOdds();
+  const gameProbs = manualOddsToGameProbs(manualOdds, GAMES, RESULTS);
   const analytics = computeEntryProbabilities(
     ENTRIES,
     GAMES,
     RESULTS,
-    SCORING_SETTINGS
+    SCORING_SETTINGS,
+    gameProbs
   );
 
   const remaining = getRemainingGames(GAMES, RESULTS);
