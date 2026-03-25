@@ -351,113 +351,119 @@ export default function HedgingClient({
     );
   }
 
-  const anyHedge = personData.some((p) => p.bestHedge !== null && p.bestHedge.guaranteedFloor > 0);
+  const positiveHedges = personData.filter((p) => p.bestHedge !== null && p.bestHedge.guaranteedFloor > 0);
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-slate-500">· Odds via {oddsSource}</p>
+      <p className="text-sm text-slate-500">Live odds via {oddsSource} · updates on refresh</p>
 
-      {!anyHedge && (
+      {/* Action summary — shown when anyone has a positive hedge */}
+      {positiveHedges.length > 0 && (
+        <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/10 p-5 space-y-3">
+          <div className="text-sm font-semibold text-emerald-300 uppercase tracking-wider">
+            Guaranteed profit available right now
+          </div>
+          <div className="space-y-2">
+            {positiveHedges.map((p) => {
+              const h = p.bestHedge!;
+              const am = h.americanOdds > 0 ? `+${h.americanOdds}` : `${h.americanOdds}`;
+              return (
+                <div key={p.personName} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+                  <span className="font-semibold text-white">{p.personName}:</span>
+                  <span className="text-slate-300">
+                    Bet <span className="font-semibold text-white">${h.betAmount}</span> on{" "}
+                    <span className="font-semibold text-white">{h.betOnTeamName}</span> at{" "}
+                    <span className="text-blue-300">{am}</span> on {h.bookmaker}
+                  </span>
+                  <span className="text-emerald-400 font-semibold">
+                    → locks in +${h.guaranteedFloor} no matter what
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {positiveHedges.length === 0 && (
         <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center text-slate-400">
           No guaranteed positive-floor hedge opportunities at current odds. Check back as lines move.
         </div>
       )}
 
+      {/* Per-person detail cards */}
       {personData.map((person) => {
         const best = person.bestHedge;
         const hasOpportunity = best !== null && best.guaranteedFloor > 0;
         const americanStr = best
-          ? best.americanOdds > 0
-            ? `+${best.americanOdds}`
-            : `${best.americanOdds}`
+          ? best.americanOdds > 0 ? `+${best.americanOdds}` : `${best.americanOdds}`
           : "";
+
+        // Without hedge: rough expected outcome (50/50 assumption)
+        const withoutHedge = best ? best.evIfNoBet : null;
+        // With hedge: guaranteed no matter what
+        const withHedge = best ? best.guaranteedFloor : null;
 
         return (
           <div
             key={person.personName}
             className={`rounded-xl border p-5 space-y-4 ${
-              hasOpportunity
-                ? "border-emerald-700/60 bg-emerald-900/10"
-                : "border-slate-800 bg-slate-900/60"
+              hasOpportunity ? "border-emerald-700/60 bg-emerald-900/10" : "border-slate-800 bg-slate-900/60"
             }`}
           >
+            {/* Header */}
             <div className="flex items-start justify-between flex-wrap gap-2">
               <div>
                 <div className="text-xl font-bold text-white">{person.personName}</div>
-                <div className="text-sm text-slate-400 mt-0.5">
-                  {person.displayNames.join(" · ")}
-                </div>
+                <div className="text-sm text-slate-400 mt-0.5">{person.displayNames.join(" · ")}</div>
               </div>
               <div className="text-right">
-                <div
-                  className={`text-lg font-bold tabular-nums ${
-                    person.combinedPoolEV > 0 ? "text-emerald-400" : "text-red-400"
-                  }`}
-                >
+                <div className={`text-lg font-bold tabular-nums ${person.combinedPoolEV > 0 ? "text-emerald-400" : "text-red-400"}`}>
                   {person.combinedPoolEV >= 0 ? "+" : ""}${person.combinedPoolEV}
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">Expected net</div>
+                <div className="text-xs text-slate-500 mt-0.5">Expected net (no hedge)</div>
               </div>
             </div>
 
             {best && (
-              <div
-                className={`rounded-lg p-4 border ${
-                  hasOpportunity
-                    ? "border-emerald-700/50 bg-emerald-900/20"
-                    : "border-slate-700/50 bg-slate-800/40"
-                }`}
-              >
-                <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">
-                  {hasOpportunity ? "★ Best Hedge Opportunity" : "Hedge"}
+              <div className={`rounded-lg border p-4 space-y-3 ${hasOpportunity ? "border-emerald-700/50 bg-emerald-900/20" : "border-slate-700/50 bg-slate-800/40"}`}>
+                {/* Action line */}
+                <div>
+                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+                    {hasOpportunity ? "★ Recommended action" : "Hedge option"}
+                  </div>
+                  <div className="text-base font-semibold text-white">
+                    Bet <span className="text-emerald-300">${best.betAmount}</span> on{" "}
+                    <span className="text-emerald-300">{best.betOnTeamName}</span>{" "}
+                    <span className="text-slate-400 font-normal">at</span>{" "}
+                    <span className="text-blue-300">{americanStr}</span>{" "}
+                    <span className="text-slate-400 font-normal text-sm">on {best.bookmaker}</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">{best.gameLabel}</div>
                 </div>
-                <div className="text-sm text-slate-300 mb-3">{best.gameLabel}</div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                  <div className="rounded bg-slate-900/60 p-2">
-                    <div className="text-lg font-bold text-white">${best.betAmount}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">Bet amount</div>
-                  </div>
-                  <div className="rounded bg-slate-900/60 p-2">
-                    <div className="text-lg font-bold text-blue-300">{americanStr}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{best.betOnTeamName}</div>
-                  </div>
-                  <div className="rounded bg-slate-900/60 p-2">
-                    <div
-                      className={`text-lg font-bold ${
-                        best.guaranteedFloor > 0 ? "text-emerald-400" : "text-orange-400"
-                      }`}
-                    >
-                      {best.guaranteedFloor >= 0 ? "+" : ""}${best.guaranteedFloor}
+
+                {/* Two outcome comparison */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-slate-900/60 p-3 space-y-1">
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">If you hedge</div>
+                    <div className={`text-2xl font-bold tabular-nums ${(withHedge ?? 0) > 0 ? "text-emerald-400" : "text-orange-400"}`}>
+                      {(withHedge ?? 0) >= 0 ? "+" : ""}${withHedge}
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">Guaranteed floor</div>
+                    <div className="text-xs text-slate-400">guaranteed — either outcome</div>
                   </div>
-                  <div className="rounded bg-slate-900/60 p-2">
-                    <div
-                      className={`text-lg font-bold ${
-                        best.evIfNoBet >= 0 ? "text-slate-300" : "text-red-400"
-                      }`}
-                    >
-                      {best.evIfNoBet >= 0 ? "+" : ""}${best.evIfNoBet}
+                  <div className="rounded-lg bg-slate-900/60 p-3 space-y-1">
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">If you don't hedge</div>
+                    <div className={`text-2xl font-bold tabular-nums ${(withoutHedge ?? 0) >= 0 ? "text-slate-300" : "text-red-400"}`}>
+                      {(withoutHedge ?? 0) >= 0 ? "+" : ""}${withoutHedge}
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">EV without hedge</div>
+                    <div className="text-xs text-slate-400">expected (ranges widely)</div>
                   </div>
                 </div>
-                <div className="mt-3 text-xs text-slate-500 space-y-0.5">
-                  <div>
-                    Pool EV if pick wins:{" "}
-                    <span className="text-slate-300">
-                      {best.poolEVIfPickWins >= 0 ? "+" : ""}${best.poolEVIfPickWins}
-                    </span>
-                  </div>
-                  <div>
-                    Pool EV if pick loses:{" "}
-                    <span className="text-slate-300">
-                      {best.poolEVIfPickLoses >= 0 ? "+" : ""}${best.poolEVIfPickLoses}
-                    </span>
-                  </div>
-                  <div className="text-slate-600 pt-1">
-                    via {best.bookmaker} · Bet ${best.betAmount} on {best.betOnTeamName} at {americanStr}
-                  </div>
+
+                {/* Range detail */}
+                <div className="text-xs text-slate-500 border-t border-slate-700/50 pt-2 space-y-0.5">
+                  <div>Without hedge: ranges from <span className="text-slate-300">{best.poolEVIfPickLoses >= 0 ? "+" : ""}${best.poolEVIfPickLoses}</span> (pick loses) to <span className="text-slate-300">{best.poolEVIfPickWins >= 0 ? "+" : ""}${best.poolEVIfPickWins}</span> (pick wins)</div>
+                  <div>With hedge: exactly <span className={hasOpportunity ? "text-emerald-400" : "text-slate-300"}>{best.guaranteedFloor >= 0 ? "+" : ""}${best.guaranteedFloor}</span> either way</div>
                 </div>
               </div>
             )}
