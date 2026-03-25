@@ -4,8 +4,10 @@ import { ENTRIES } from "@/data/entries";
 import { SCORING_SETTINGS } from "@/data/settings";
 import { getResults } from "@/lib/getResults";
 import { PRIZE_CONFIG, parseBracketName } from "@/data/prizeConfig";
-import { fetchLiveOdds, matchOddsToGames } from "@/lib/odds";
-import { fetchEspnOdds } from "@/lib/espnOdds";
+import { getManualOdds } from "@/lib/manualOdds";
+import { americanToDecimal } from "@/lib/odds";
+import { getGameParticipant } from "@/lib/bracket";
+import { getTeamName } from "@/data/teams";
 import { computePersonHedgeData } from "@/lib/hedging";
 import { computeEntryProbabilities } from "@/lib/simulation";
 import type { HedgeBet, PersonHedgeData } from "@/lib/types";
@@ -26,25 +28,39 @@ export default async function HedgingPage() {
     SCORING_SETTINGS
   );
 
-  // Fetch live odds — try ESPN (free, no key) first, fall back to The Odds API
-  let rawOdds = null;
-  let oddsError = null;
-  let oddsSource = "ESPN BET";
+  // Load manually-entered odds from KV
+  const manualOddsEntries = await getManualOdds();
 
-  const espnResult = await fetchEspnOdds();
-  if (espnResult.odds && espnResult.odds.length > 0) {
-    rawOdds = espnResult.odds;
-  } else {
-    const apiResult = await fetchLiveOdds();
-    if (apiResult.odds && apiResult.odds.length > 0) {
-      rawOdds = apiResult.odds;
-      oddsSource = "The Odds API";
-    } else {
-      oddsError = apiResult.error ?? { type: "no_games" as const, message: espnResult.error ?? "No odds available." };
-    }
-  }
+  // Convert ManualGameOdds → GameOdds using resolved team participants
+  const liveOdds = manualOddsEntries.flatMap((entry) => {
+    const game = GAMES.find((g) => g.id === entry.gameId);
+    if (!game) return [];
+    const t1 = getGameParticipant(game, "team1", RESULTS);
+    const t2 = getGameParticipant(game, "team2", RESULTS);
+    if (!t1 || !t2) return [];
 
-  const liveOdds = rawOdds ? matchOddsToGames(rawOdds, RESULTS) : [];
+    const makeTeam = (teamId: string, americanOdds: number) => {
+      const decimal = americanToDecimal(americanOdds);
+      return {
+        teamId,
+        teamName: getTeamName(teamId),
+        decimalOdds: decimal,
+        americanOdds,
+        impliedProbability: 1 / decimal,
+        bookmaker: entry.bookmaker ?? "DraftKings",
+      };
+    };
+
+    return [{
+      gameId: entry.gameId,
+      apiMatchId: entry.gameId,
+      commenceTime: "",
+      team1: makeTeam(t1, entry.team1AmericanOdds),
+      team2: makeTeam(t2, entry.team2AmericanOdds),
+    }];
+  });
+
+  const oddsSource = "DraftKings";
   const hasLiveOdds = liveOdds.length > 0;
 
   const personData = hasLiveOdds
@@ -126,31 +142,11 @@ export default async function HedgingPage() {
       {!hasLiveOdds && (
         <div className="rounded-xl border border-yellow-800/50 bg-yellow-900/10 p-5 space-y-3">
           <div className="font-semibold text-yellow-300">
-            Live odds not connected
+            No odds entered yet
           </div>
-          {oddsError && (
-            <div className="rounded bg-slate-900 p-3 text-sm font-mono text-red-400">
-              {oddsError.type}: {oddsError.message}
-            </div>
-          )}
-          {oddsError?.type === "no_key" && (
-            <p className="text-sm text-slate-300">
-              Add <code className="text-blue-400">ODDS_API_KEY</code> to Vercel →
-              Settings → Environment Variables, then redeploy.
-            </p>
-          )}
-          {oddsError?.type === "no_games" && (
-            <p className="text-sm text-slate-300">
-              API key is valid but no Sweet 16 games are posted yet. Check back
-              closer to tip-off — odds usually appear 24–48 hrs before games.
-            </p>
-          )}
-          {oddsError?.type === "api_error" && (
-            <p className="text-sm text-slate-300">
-              Double-check the key value in Vercel environment variables matches
-              exactly what the-odds-api.com shows in your account dashboard.
-            </p>
-          )}
+          <p className="text-sm text-slate-300">
+            Go to the <strong className="text-white">Admin</strong> page and enter the moneyline odds for each upcoming game. You can find them on DraftKings, ESPN, or any sportsbook.
+          </p>
           <EVOnlyTable analytics={analytics} />
         </div>
       )}

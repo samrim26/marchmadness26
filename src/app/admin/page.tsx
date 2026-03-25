@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GAMES } from "@/data/games";
 import { TEAMS } from "@/data/teams";
 import { getResults } from "@/lib/getResults";
+import { getManualOdds } from "@/lib/manualOdds";
 import { getGameParticipant } from "@/lib/bracket";
 import AdminClient from "./AdminClient";
 
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 
 export default async function AdminPage() {
   const results = await getResults();
+  const initialOdds = await getManualOdds();
 
   const teamName = (id: string | null) =>
     id ? (TEAMS.find((t) => t.id === id)?.name ?? id) : null;
@@ -38,7 +40,7 @@ export default async function AdminPage() {
           Click a team name to record them as the winner. All pages update instantly.
         </p>
       </div>
-      <AdminClient initialResults={results} rows={rows} />
+      <AdminClient initialResults={results} rows={rows} initialOdds={initialOdds} />
     </div>
   );
 }
