@@ -180,22 +180,37 @@ async function fetchAndSync(): Promise<number> {
   return json.saved ?? 0;
 }
 
+const POLL_INTERVAL_MS = 60_000; // re-fetch odds every 60 seconds
+
 /**
- * Invisible component — fetches ESPN odds from the browser on mount,
- * saves them to KV, then re-renders the page so the server simulation
- * immediately picks up the real probabilities without a second manual refresh.
+ * Invisible component — polls ESPN odds from the browser every 60 seconds,
+ * saves them to KV, and soft-refreshes server components so win percentages
+ * update in place without a full page reload.
  */
 export default function OddsAutoSync() {
   const router = useRouter();
 
   useEffect(() => {
-    fetchAndSync()
-      .then((saved) => {
-        if (saved > 0) {
-          router.refresh(); // re-run server components with fresh odds
+    let cancelled = false;
+
+    async function sync() {
+      if (cancelled) return;
+      try {
+        const saved = await fetchAndSync();
+        if (!cancelled && saved > 0) {
+          router.refresh();
         }
-      })
-      .catch(() => {});
+      } catch {
+        // ignore errors — next poll will retry
+      }
+    }
+
+    sync(); // immediate on mount
+    const id = setInterval(sync, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
