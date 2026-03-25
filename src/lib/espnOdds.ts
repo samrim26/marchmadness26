@@ -54,11 +54,20 @@ interface EspnEvent {
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  Referer: "https://www.espn.com/",
+  Origin: "https://www.espn.com",
+};
+
 async function fetchScoreboardDate(yyyymmdd: string): Promise<EspnEvent[]> {
   try {
     const res = await fetch(
       `${ESPN_BASE}/scoreboard?dates=${yyyymmdd}&limit=50`,
-      { cache: "no-store" }
+      { cache: "no-store", headers: BROWSER_HEADERS }
     );
     if (!res.ok) return [];
     const data = await res.json();
