@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 const ESPN_BASE =
   "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball";
@@ -57,7 +58,7 @@ function americanToDecimal(american: number): number {
   return 100 / Math.abs(american) + 1;
 }
 
-async function fetchAndSync() {
+async function fetchAndSync(): Promise<number> {
   const now = new Date();
   const dates: string[] = [];
   for (let i = 0; i < 10; i++) {
@@ -167,23 +168,35 @@ async function fetchAndSync() {
     }
   }
 
-  if (oddsData.length === 0) return;
+  if (oddsData.length === 0) return 0;
 
-  await fetch("/api/odds/sync", {
+  const res = await fetch("/api/odds/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ oddsData }),
   });
+  if (!res.ok) return 0;
+  const json = await res.json() as { saved?: number };
+  return json.saved ?? 0;
 }
 
 /**
- * Invisible component — fetches ESPN odds from the browser on mount and
- * auto-saves them to KV so the server-side simulation uses real probabilities.
+ * Invisible component — fetches ESPN odds from the browser on mount,
+ * saves them to KV, then re-renders the page so the server simulation
+ * immediately picks up the real probabilities without a second manual refresh.
  */
 export default function OddsAutoSync() {
+  const router = useRouter();
+
   useEffect(() => {
-    fetchAndSync().catch(() => {});
-  }, []);
+    fetchAndSync()
+      .then((saved) => {
+        if (saved > 0) {
+          router.refresh(); // re-run server components with fresh odds
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 }
