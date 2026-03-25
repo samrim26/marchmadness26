@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Header } from "@/components/Header";
+import OddsAutoSync from "@/components/OddsAutoSync";
 
 export const metadata: Metadata = {
   title: "March Madness 2026 | Bracket Odds Tracker",
@@ -17,12 +18,12 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className="min-h-screen bg-slate-950 text-slate-100 antialiased">
         <Header />
+        <OddsAutoSync />
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </main>
         <footer className="mt-16 border-t border-slate-800 py-6 text-center text-sm text-slate-500">
-          March Madness 2026 · Bracket Odds Tracker · All probabilities assume
-          equal-weight outcomes
+          March Madness 2026 · Bracket Odds Tracker · Probabilities weighted by live sportsbook odds
         </footer>
       </body>
     </html>

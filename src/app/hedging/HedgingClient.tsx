@@ -33,7 +33,6 @@ export interface SerializedEntry {
 const ESPN_BASE =
   "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball";
 
-// Broad team name normalization for ESPN names → our team IDs
 const ESPN_NAME_MAP: Record<string, string> = {
   duke: "duke",
   "duke blue devils": "duke",
@@ -119,7 +118,6 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
       const events: Record<string, unknown>[] = data.events ?? [];
 
       for (const event of events) {
-        // Odds are inside competitions[0].odds[], NOT at the event level
         const comp = (event.competitions as Record<string, unknown>[])?.[0];
         if (!comp) continue;
 
@@ -139,7 +137,6 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
           ) ??
           oddsArr[0];
 
-        // moneyline.home.close.odds / moneyline.away.close.odds (strings like "-290")
         const ml = oddsEntry.moneyline as Record<string, unknown> | undefined;
         let awayML: number | null = null;
         let homeML: number | null = null;
@@ -150,7 +147,6 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
           awayML = away?.odds != null ? Number(String(away.odds).replace("+", "")) : null;
           homeML = home?.odds != null ? Number(String(home.odds).replace("+", "")) : null;
         } else {
-          // Fallback: numeric moneyLine field
           awayML = (oddsEntry.awayTeamOdds as Record<string, unknown> | undefined)?.moneyLine as number ?? null;
           homeML = (oddsEntry.homeTeamOdds as Record<string, unknown> | undefined)?.moneyLine as number ?? null;
         }
@@ -192,10 +188,20 @@ async function fetchEspnOddsBrowser(): Promise<ParsedOdds[]> {
   return results;
 }
 
-// ─── Hedge computation from pre-computed EVs ─────────────────────────────────
+// ─── Hedge computation ────────────────────────────────────────────────────────
 
-// Decisiveness threshold: game must swing win probability by at least this much
-const DECISIVE_THRESHOLD = 0.15;
+/**
+ * A hedge is only shown when placing the bet is mathematically guaranteed to
+ * make money no matter what. Requirements:
+ *   1. Your pick nearly locks a pool win (pWinIfPick > 0.95)
+ *   2. If the other team wins you are nearly certainly out (pWinIfOpp < 0.05)
+ *   3. The guaranteed floor after the hedge bet is positive (floor > 0)
+ *
+ * Under these conditions the "floor" figure is real cash, not an average:
+ *   Pick wins  → pool pays ~1st prize − H (you lose the hedge bet)
+ *   Opp wins   → pool pays ~nothing  + H × (decimalOdds − 1) (you win the hedge bet)
+ * Both values converge to floor = evIfPick − H.
+ */
 
 interface HedgeBet {
   gameLabel: string;
@@ -203,24 +209,15 @@ interface HedgeBet {
   betAmount: number;
   americanOdds: number;
   guaranteedFloor: number;
-  evIfNoBet: number;
-  poolEVIfPickWins: number;
-  poolEVIfPickLoses: number;
   bookmaker: string;
-  /** True when picking the right outcome nearly guarantees a win and wrong outcome nearly guarantees out */
-  isCashGuarantee: boolean;
-  /** P(this entry wins pool) if the favoured pick wins */
   pWinIfPick: number;
-  /** P(this entry wins pool) if the opposing team wins */
   pWinIfOpp: number;
 }
 
 interface PersonHedge {
   personName: string;
   displayNames: string[];
-  combinedPoolEV: number;
   hedges: HedgeBet[];
-  bestHedge: HedgeBet | null;
 }
 
 function computeHedges(
@@ -228,8 +225,7 @@ function computeHedges(
   entries: SerializedEntry[],
   liveOdds: ParsedOdds[]
 ): PersonHedge[] {
-  // Group entries by person
-  const personMap = new Map<string, number[]>(); // personName → entry indices
+  const personMap = new Map<string, number[]>();
   for (let i = 0; i < entries.length; i++) {
     const name = entries[i].personName;
     if (!personMap.has(name)) personMap.set(name, []);
@@ -239,12 +235,11 @@ function computeHedges(
   const result: PersonHedge[] = [];
 
   for (const [personName, indices] of personMap) {
-    const allHedges: HedgeBet[] = [];
+    const hedges: HedgeBet[] = [];
 
     for (const ei of indices) {
       const entry = entries[ei];
       for (const game of games) {
-        // Match odds to this game
         const odds = liveOdds.find(
           (o) =>
             (o.team1Id === game.team1Id && o.team2Id === game.team2Id) ||
@@ -252,75 +247,59 @@ function computeHedges(
         );
         if (!odds) continue;
 
-        const ev1 = game.evsIfTeam1Wins[ei]; // EV if game.team1 wins
-        const ev2 = game.evsIfTeam2Wins[ei]; // EV if game.team2 wins
-
-        // Win probabilities conditional on each outcome
+        const ev1 = game.evsIfTeam1Wins[ei];
+        const ev2 = game.evsIfTeam2Wins[ei];
         const pWin1 = game.pWinIfTeam1Wins[ei];
         const pWin2 = game.pWinIfTeam2Wins[ei];
 
-        // Map game.team1/team2 to the correct odds regardless of ESPN home/away order
+        // Align odds to game.team1 vs game.team2
         const t1MatchesOddsTeam1 = odds.team1Id === game.team1Id;
         const t1Decimal  = t1MatchesOddsTeam1 ? odds.team1DecimalOdds  : odds.team2DecimalOdds;
         const t1American = t1MatchesOddsTeam1 ? odds.team1AmericanOdds : odds.team2AmericanOdds;
         const t2Decimal  = t1MatchesOddsTeam1 ? odds.team2DecimalOdds  : odds.team1DecimalOdds;
         const t2American = t1MatchesOddsTeam1 ? odds.team2AmericanOdds : odds.team1AmericanOdds;
 
-        // Prefer the scenario with higher EV; hedge by betting on the OTHER team
+        // Determine which outcome this entry "prefers"
         const [evIfPick, evIfOpp, oppDecimal, oppAmerican, oppName, pWinIfPick, pWinIfOpp] =
           ev1 >= ev2
-            ? [ev1, ev2, t2Decimal, t2American, game.team2Name, pWin1, pWin2] // prefer t1 → bet on t2
-            : [ev2, ev1, t1Decimal, t1American, game.team1Name, pWin2, pWin1]; // prefer t2 → bet on t1
+            ? [ev1, ev2, t2Decimal, t2American, game.team2Name, pWin1, pWin2]
+            : [ev2, ev1, t1Decimal, t1American, game.team1Name, pWin2, pWin1];
 
-        const evDiff = evIfPick - evIfOpp;
-        if (evDiff <= 0) continue;
+        if (evIfPick <= evIfOpp) continue;
 
-        // Decisiveness check: skip if game doesn't meaningfully swing win probability
-        const winProbSwing = pWinIfPick - pWinIfOpp;
-        if (winProbSwing < DECISIVE_THRESHOLD) continue;
+        // Only consider this a true cash guarantee when near-certain win/loss
+        if (pWinIfPick <= 0.95 || pWinIfOpp >= 0.05) continue;
 
-        const H = evDiff / oppDecimal;
+        // Hedge amount to equalise outcomes
+        const H = (evIfPick - evIfOpp) / oppDecimal;
         const floor = evIfPick - H;
 
-        // Cash guarantee: picking right nearly locks a win, picking wrong nearly locks a loss
-        const isCashGuarantee = pWinIfPick > 0.85 && pWinIfOpp < 0.05;
+        // Only recommend if floor is actually positive (real guaranteed profit)
+        if (floor <= 0) continue;
 
-        allHedges.push({
+        hedges.push({
           gameLabel: `${game.gameLabel} (${entry.displayName})`,
           betOnTeamName: oppName,
           betAmount: Math.max(1, Math.round(H)),
           americanOdds: oppAmerican,
           guaranteedFloor: Math.round(floor * 100) / 100,
-          evIfNoBet: Math.round(((evIfPick + evIfOpp) / 2) * 100) / 100,
-          poolEVIfPickWins: Math.round(evIfPick * 100) / 100,
-          poolEVIfPickLoses: Math.round(evIfOpp * 100) / 100,
           bookmaker: odds.bookmaker,
-          isCashGuarantee,
           pWinIfPick,
           pWinIfOpp,
         });
       }
     }
 
-    const combinedEV = Math.round(
-      indices.reduce((s, i) => s + entries[i].overallPoolEV, 0) * 100
-    ) / 100;
-
-    const bestHedge =
-      allHedges.length > 0
-        ? allHedges.reduce((b, h) => (h.guaranteedFloor > b.guaranteedFloor ? h : b))
-        : null;
-
-    result.push({
-      personName,
-      displayNames: indices.map((i) => entries[i].displayName),
-      combinedPoolEV: combinedEV,
-      hedges: allHedges.sort((a, b) => b.guaranteedFloor - a.guaranteedFloor),
-      bestHedge,
-    });
+    if (hedges.length > 0) {
+      result.push({
+        personName,
+        displayNames: indices.map((i) => entries[i].displayName),
+        hedges: hedges.sort((a, b) => b.guaranteedFloor - a.guaranteedFloor),
+      });
+    }
   }
 
-  return result.sort((a, b) => b.combinedPoolEV - a.combinedPoolEV);
+  return result.sort((a, b) => b.hedges[0].guaranteedFloor - a.hedges[0].guaranteedFloor);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -354,7 +333,7 @@ export default function HedgingClient({
   if (status === "loading") {
     return (
       <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-8 text-center text-slate-400 animate-pulse">
-        Loading live odds…
+        Checking live odds…
       </div>
     );
   }
@@ -378,194 +357,113 @@ export default function HedgingClient({
     );
   }
 
-  const positiveHedges = personData.filter((p) => p.bestHedge !== null && p.bestHedge.guaranteedFloor > 0);
-
   return (
     <div className="space-y-6">
       <p className="text-sm text-slate-500">Live odds via {oddsSource} · updates on refresh</p>
 
-      {/* Action summary — shown when anyone has a positive hedge */}
-      {positiveHedges.length > 0 && (
-        <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/10 p-5 space-y-3">
-          <div className="text-sm font-semibold text-emerald-300 uppercase tracking-wider">
-            Guaranteed cash available right now
-          </div>
-          <div className="space-y-2">
-            {positiveHedges.map((p) => {
-              const h = p.bestHedge!;
-              const am = h.americanOdds > 0 ? `+${h.americanOdds}` : `${h.americanOdds}`;
-              return (
-                <div key={p.personName} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-                  <span className="font-semibold text-white">{p.personName}:</span>
-                  <span className="text-slate-300">
+      {personData.length === 0 ? (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-8 text-center space-y-2">
+          <div className="text-slate-300 font-medium">No guaranteed money available right now</div>
+          <p className="text-sm text-slate-500">
+            A hedge only appears here when one game is truly make-or-break for a bracket — winning nearly locks first place and losing nearly locks last. None of the current games meet that bar.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/10 p-5 space-y-3">
+            <div className="text-sm font-semibold text-emerald-300 uppercase tracking-wider">
+              Guaranteed cash available right now
+            </div>
+            <div className="space-y-2">
+              {personData.map((p) => {
+                const h = p.hedges[0];
+                const am = h.americanOdds > 0 ? `+${h.americanOdds}` : `${h.americanOdds}`;
+                return (
+                  <div key={p.personName} className="text-sm">
+                    <span className="font-semibold text-white">{p.personName}:</span>{" "}
                     Bet <span className="font-semibold text-white">${h.betAmount}</span> on{" "}
                     <span className="font-semibold text-white">{h.betOnTeamName}</span> at{" "}
-                    <span className="text-blue-300">{am}</span> on {h.bookmaker}
-                  </span>
-                  {h.isCashGuarantee ? (
+                    <span className="text-blue-300">{am}</span> on {h.bookmaker}{" "}
                     <span className="text-emerald-400 font-semibold">
-                      → Guaranteed cash: Walk away with at least +${h.guaranteedFloor} regardless of this game
+                      → guaranteed +${h.guaranteedFloor} no matter what
                     </span>
-                  ) : (
-                    <span className="text-emerald-400 font-semibold">
-                      → pool EV stays at +${h.guaranteedFloor} regardless of this game
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {positiveHedges.length === 0 && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center text-slate-400">
-          No pivotal hedge opportunities at current odds. Check back as lines move or as decisive games approach.
-        </div>
-      )}
-
-      {/* Per-person detail cards */}
-      {personData.map((person) => {
-        const best = person.bestHedge;
-        const hasOpportunity = best !== null && best.guaranteedFloor > 0;
-        const americanStr = best
-          ? best.americanOdds > 0 ? `+${best.americanOdds}` : `${best.americanOdds}`
-          : "";
-
-        // Without hedge: rough expected outcome (probability-weighted)
-        const withoutHedge = best ? best.evIfNoBet : null;
-        // With hedge: guaranteed no matter what
-        const withHedge = best ? best.guaranteedFloor : null;
-
-        return (
-          <div
-            key={person.personName}
-            className={`rounded-xl border p-5 space-y-4 ${
-              hasOpportunity ? "border-emerald-700/60 bg-emerald-900/10" : "border-slate-800 bg-slate-900/60"
-            }`}
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between flex-wrap gap-2">
-              <div>
-                <div className="text-xl font-bold text-white">{person.personName}</div>
-                <div className="text-sm text-slate-400 mt-0.5">{person.displayNames.join(" · ")}</div>
-              </div>
-              <div className="text-right">
-                <div className={`text-lg font-bold tabular-nums ${person.combinedPoolEV > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {person.combinedPoolEV >= 0 ? "+" : ""}${person.combinedPoolEV}
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5">Expected net (no hedge)</div>
-              </div>
-            </div>
-
-            {best && (
-              <div className={`rounded-lg border p-4 space-y-3 ${hasOpportunity ? "border-emerald-700/50 bg-emerald-900/20" : "border-slate-700/50 bg-slate-800/40"}`}>
-                {/* Action line */}
-                <div>
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">
-                    {hasOpportunity ? "★ Recommended action" : "Hedge option"}
                   </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {personData.map((person) => {
+            const best = person.hedges[0];
+            const am = best.americanOdds > 0 ? `+${best.americanOdds}` : `${best.americanOdds}`;
+
+            return (
+              <div
+                key={person.personName}
+                className="rounded-xl border border-emerald-700/60 bg-emerald-900/10 p-5 space-y-4"
+              >
+                <div>
+                  <div className="text-xl font-bold text-white">{person.personName}</div>
+                  <div className="text-sm text-slate-400 mt-0.5">{person.displayNames.join(" · ")}</div>
+                </div>
+
+                <div className="rounded-lg border border-emerald-700/50 bg-emerald-900/20 p-4 space-y-3">
+                  <div className="text-xs text-slate-500 uppercase tracking-wider">Guaranteed cash hedge</div>
+
                   <div className="text-base font-semibold text-white">
                     Bet <span className="text-emerald-300">${best.betAmount}</span> on{" "}
                     <span className="text-emerald-300">{best.betOnTeamName}</span>{" "}
                     <span className="text-slate-400 font-normal">at</span>{" "}
-                    <span className="text-blue-300">{americanStr}</span>{" "}
+                    <span className="text-blue-300">{am}</span>{" "}
                     <span className="text-slate-400 font-normal text-sm">on {best.bookmaker}</span>
                   </div>
-                  <div className="text-xs text-slate-500 mt-0.5">{best.gameLabel}</div>
+                  <div className="text-xs text-slate-500">{best.gameLabel}</div>
+
+                  <div className="rounded-md bg-emerald-900/40 border border-emerald-700/40 px-4 py-3">
+                    <div className="text-2xl font-bold text-emerald-400">
+                      +${best.guaranteedFloor} guaranteed
+                    </div>
+                    <div className="text-sm text-slate-300 mt-1">
+                      No matter who wins this game, you walk away with at least +${best.guaranteedFloor} from the combination of your pool position and this bet.
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-500 space-y-0.5 border-t border-slate-700/50 pt-2">
+                    <div>
+                      Why it works: if your pick wins, you win the pool (~{(best.pWinIfPick * 100).toFixed(0)}% chance) and the bet is a small loss.
+                    </div>
+                    <div>
+                      If {best.betOnTeamName} wins, you lose the pool (~{(best.pWinIfOpp * 100).toFixed(0)}% win chance) but your sportsbook payout covers it.
+                    </div>
+                  </div>
                 </div>
 
-                {/* Cash guarantee / decisiveness banner */}
-                {best.isCashGuarantee ? (
-                  <div className="rounded-md bg-emerald-900/30 border border-emerald-700/40 px-3 py-2 text-sm text-emerald-300 font-medium">
-                    Guaranteed cash: Walk away with at least +${best.guaranteedFloor} — pick wins (
-                    {(best.pWinIfPick * 100).toFixed(0)}% pool win chance) or loses (
-                    {(best.pWinIfOpp * 100).toFixed(0)}% pool win chance)
-                  </div>
-                ) : (
-                  <div className="rounded-md bg-blue-900/20 border border-blue-800/30 px-3 py-2 text-sm text-blue-300">
-                    Reduces your swing from [
-                    <span className="font-medium">{best.poolEVIfPickLoses >= 0 ? "+" : ""}${best.poolEVIfPickLoses}</span>
-                    {" to "}
-                    <span className="font-medium">{best.poolEVIfPickWins >= 0 ? "+" : ""}${best.poolEVIfPickWins}</span>]
-                    {" down to "}
-                    <span className="font-medium text-white">${best.guaranteedFloor >= 0 ? "+" : ""}{best.guaranteedFloor} floor</span>
-                    {" — win probability swings "}
-                    <span className="font-medium">{(best.pWinIfOpp * 100).toFixed(0)}%→{(best.pWinIfPick * 100).toFixed(0)}%</span>
-                    {" on this game"}
-                  </div>
+                {person.hedges.length > 1 && (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-slate-400 hover:text-white transition-colors">
+                      {person.hedges.length - 1} more guaranteed hedge{person.hedges.length > 2 ? "s" : ""}
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {person.hedges.slice(1).map((h, i) => {
+                        const a = h.americanOdds > 0 ? `+${h.americanOdds}` : `${h.americanOdds}`;
+                        return (
+                          <div key={i} className="flex items-center justify-between text-sm text-slate-400 gap-2">
+                            <span className="truncate">{h.gameLabel}</span>
+                            <span>
+                              Bet ${h.betAmount} on <span className="text-white">{h.betOnTeamName}</span> ({a}) →{" "}
+                              <span className="text-emerald-400">+${h.guaranteedFloor} guaranteed</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
                 )}
-
-                {/* Two outcome comparison */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-slate-900/60 p-3 space-y-1">
-                    <div className="text-xs text-slate-500 uppercase tracking-wider">Pool EV after hedge</div>
-                    <div className={`text-2xl font-bold tabular-nums ${(withHedge ?? 0) > 0 ? "text-emerald-400" : "text-orange-400"}`}>
-                      {(withHedge ?? 0) >= 0 ? "+" : ""}${withHedge}
-                    </div>
-                    <div className="text-xs text-slate-400">same regardless of this game</div>
-                  </div>
-                  <div className="rounded-lg bg-slate-900/60 p-3 space-y-1">
-                    <div className="text-xs text-slate-500 uppercase tracking-wider">Pool EV without hedge</div>
-                    <div className={`text-2xl font-bold tabular-nums ${(withoutHedge ?? 0) >= 0 ? "text-slate-300" : "text-red-400"}`}>
-                      {(withoutHedge ?? 0) >= 0 ? "+" : ""}${withoutHedge}
-                    </div>
-                    <div className="text-xs text-slate-400">probability-weighted average</div>
-                  </div>
-                </div>
-
-                {/* Range detail */}
-                <div className="text-xs text-slate-500 border-t border-slate-700/50 pt-2 space-y-0.5">
-                  <div>
-                    Without hedge: pool EV swings from{" "}
-                    <span className="text-slate-300">{best.poolEVIfPickLoses >= 0 ? "+" : ""}${best.poolEVIfPickLoses}</span>{" "}
-                    if pick loses to{" "}
-                    <span className="text-slate-300">{best.poolEVIfPickWins >= 0 ? "+" : ""}${best.poolEVIfPickWins}</span>{" "}
-                    if pick wins
-                  </div>
-                  <div>
-                    With hedge: pool EV locked at{" "}
-                    <span className={hasOpportunity ? "text-emerald-400" : "text-slate-300"}>{best.guaranteedFloor >= 0 ? "+" : ""}${best.guaranteedFloor}</span>{" "}
-                    — remaining games still determine actual payout
-                  </div>
-                </div>
               </div>
-            )}
-
-            {person.hedges.length > 1 && (
-              <details className="text-sm">
-                <summary className="cursor-pointer text-slate-400 hover:text-white transition-colors">
-                  All {person.hedges.length} opportunities
-                </summary>
-                <div className="mt-3 space-y-2">
-                  {person.hedges.slice(1).map((h, i) => {
-                    const am = h.americanOdds > 0 ? `+${h.americanOdds}` : `${h.americanOdds}`;
-                    return (
-                      <div key={i} className="flex items-center justify-between text-sm text-slate-400 gap-2">
-                        <span className="truncate">{h.gameLabel}</span>
-                        <span>
-                          Bet ${h.betAmount} on{" "}
-                          <span className="text-white">{h.betOnTeamName}</span> ({am}) → floor{" "}
-                          <span className={h.guaranteedFloor > 0 ? "text-emerald-400" : "text-red-400"}>
-                            {h.guaranteedFloor >= 0 ? "+" : ""}${h.guaranteedFloor}
-                          </span>
-                          {h.isCashGuarantee && (
-                            <span className="ml-1 text-emerald-400 text-xs">(cash lock)</span>
-                          )}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </details>
-            )}
-
-            {person.hedges.length === 0 && (
-              <p className="text-sm text-slate-500">No pivotal hedge opportunities found — either no matching odds or games aren't decisive enough (&lt;15% win probability swing).</p>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

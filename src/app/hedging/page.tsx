@@ -90,23 +90,12 @@ export default async function HedgingPage() {
 
       {/* How it works */}
       <div className="rounded-xl border border-blue-800/30 bg-blue-900/10 p-5 text-sm space-y-2">
-        <div className="font-semibold text-blue-300 mb-1">How hedging works</div>
+        <div className="font-semibold text-blue-300 mb-1">How this works</div>
         <p className="text-slate-300">
-          Each number here is a <strong className="text-white">pool expected value</strong> — your
-          average net dollar outcome across all remaining bracket scenarios. A single game can swing
-          that EV dramatically depending on how pivotal it is to your picks.
+          A hedge only appears here when one game is <strong className="text-white">truly make-or-break</strong> for a bracket — winning nearly locks first place and losing nearly locks you out. In that case, betting on the opposing team at a sportsbook lets you collect money either way.
         </p>
         <p className="text-slate-400">
-          A hedge bet at a sportsbook on the opposing team <em>equalises</em> your pool EV for both
-          outcomes of that game — so no matter who wins, your expected position in the pool stays the same.
-          It does <strong className="text-white">not</strong> guarantee you win the pool; remaining
-          games still determine the actual payout.
-        </p>
-        <p className="text-slate-400">
-          <strong className="text-white">Formula:</strong> Bet H = (EV if pick wins − EV if pick
-          loses) ÷ opponent's decimal odds. A hedge makes sense when the{" "}
-          <strong className="text-white">locked EV &gt; $0</strong>, meaning your bracket has
-          positive expected value regardless of this game.
+          <strong className="text-white">The math:</strong> the bet size is calculated so that what you gain at the sportsbook (if your pick loses) exactly covers what you lose at the sportsbook (if your pick wins). Both paths result in the same positive dollar amount.
         </p>
       </div>
 
