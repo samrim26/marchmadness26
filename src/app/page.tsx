@@ -124,69 +124,64 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* Current standings preview */}
+      {/* Upcoming games — most live content first */}
+      {upcoming.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Next Games</h2>
+            <Link href="/stakes" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+              See stakes →
+            </Link>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {upcoming.map((g) => (
+              <GameCard key={g.id} game={g} results={RESULTS} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Standings — top 5 */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">Standings</h2>
-          <Link
-            href="/standings"
-            className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-          >
-            Full standings →
+          <Link href="/standings" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+            Full table →
           </Link>
         </div>
         <div className="rounded-xl border border-slate-800 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-900">
               <tr>
-                <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Entry
-                </th>
-                <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Pts
-                </th>
-                <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Win/Tie %
-                </th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Status
-                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-400">Entry</th>
+                <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-400">Pts</th>
+                <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-400">Win/Tie %</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-400">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
               {[...analytics]
-                .sort(
-                  (a, b) =>
-                    b.firstOrTieProbability - a.firstOrTieProbability ||
-                    b.currentScore - a.currentScore ||
-                    a.displayName.localeCompare(b.displayName)
-                )
-                .map((a, i) => (
-                  <tr
-                    key={a.entryId}
-                    className={`table-row-hover ${a.eliminated ? "opacity-50" : ""}`}
-                  >
+                .sort((a, b) => b.firstOrTieProbability - a.firstOrTieProbability || b.currentScore - a.currentScore || a.displayName.localeCompare(b.displayName))
+                .slice(0, 5)
+                .map((a) => (
+                  <tr key={a.entryId} className={`table-row-hover ${a.eliminated ? "opacity-50" : ""}`}>
                     <td className="px-4 py-2.5 font-medium text-white">
-                      <Link
-                        href={`/path/${a.entryId}`}
-                        className="hover:text-blue-300 transition-colors"
-                      >
+                      <Link href={`/path/${a.entryId}`} className="hover:text-blue-300 transition-colors">
                         {a.displayName}
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-300">
-                      {a.currentScore}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-300">
-                      {formatPercent(a.firstOrTieProbability)}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <StatusBadge analytics={a} />
-                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-300">{a.currentScore}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-300">{formatPercent(a.firstOrTieProbability)}</td>
+                    <td className="px-4 py-2.5"><StatusBadge analytics={a} /></td>
                   </tr>
                 ))}
             </tbody>
           </table>
+          <div className="px-4 py-2.5 bg-slate-900/50 border-t border-slate-800 text-center">
+            <Link href="/standings" className="text-xs text-slate-500 hover:text-blue-400 transition-colors">
+              View all {analytics.length} brackets →
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -206,48 +201,12 @@ export default async function HomePage() {
         </div>
       )}
 
-      {/* Upcoming games */}
-      {upcoming.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">
-              Next Games
-            </h2>
-            <Link
-              href="/rooting"
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Rooting guide →
-            </Link>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {upcoming.map((g) => (
-              <GameCard key={g.id} game={g} results={RESULTS} />
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Quick links */}
-      <div className="grid sm:grid-cols-3 gap-4">
-        <QuickLink
-          href="/standings"
-          icon="📊"
-          title="Standings"
-          desc="Full sortable table with win %, max possible, and elimination status."
-        />
-        <QuickLink
-          href="/rooting"
-          icon="📣"
-          title="Rooting Guide"
-          desc="Who should each person root for in every remaining game."
-        />
-        <QuickLink
-          href="/scenarios"
-          icon="🔮"
-          title="Scenarios"
-          desc="How each game outcome shifts the odds for everyone in the pool."
-        />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <QuickLink href="/standings" icon="📊" title="Standings" desc="Full table with win %, max possible, and status." />
+        <QuickLink href="/brackets" icon="🗂️" title="Brackets" desc="Every bracket side by side — see who picked what." />
+        <QuickLink href="/stakes" icon="📈" title="Stakes" desc="Which games move the needle most for each bracket." />
+        <QuickLink href="/rooting" icon="📣" title="Rooting Guide" desc="Who to cheer for in every remaining game." />
       </div>
     </div>
   );

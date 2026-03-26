@@ -180,6 +180,79 @@ async function fetchAndSync(): Promise<number> {
   return json.saved ?? 0;
 }
 
+// ─── ESPN results fetch ───────────────────────────────────────────────────────
+
+async function fetchAndSyncResults(): Promise<number> {
+  const now = new Date();
+  const dates: string[] = [];
+  // Scan past 10 days (catch completed games) + next 3 days
+  for (let i = -10; i <= 3; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() + i);
+    dates.push(
+      `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`
+    );
+  }
+
+  const resultsData: { team1Id: string; team2Id: string; winnerId: string }[] = [];
+
+  for (const date of dates) {
+    try {
+      const res = await fetch(`${ESPN_BASE}/scoreboard?dates=${date}&limit=50`, {
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const events: Record<string, unknown>[] = data.events ?? [];
+
+      for (const event of events) {
+        const comp = (event.competitions as Record<string, unknown>[])?.[0];
+        if (!comp) continue;
+
+        // Only process completed games
+        const statusType = (
+          (comp.status as Record<string, unknown> | undefined)
+            ?.type as Record<string, unknown> | undefined
+        );
+        if (!statusType?.completed) continue;
+
+        const competitors = comp.competitors as Record<string, unknown>[] | undefined;
+        if (!competitors || competitors.length < 2) continue;
+
+        const winnerComp = competitors.find((c) => c.winner === true);
+        if (!winnerComp) continue;
+
+        const getTeamId = (c: Record<string, unknown>) => {
+          const team = c.team as Record<string, unknown>;
+          const name = String(team.shortDisplayName || team.displayName || "");
+          return normalize(name);
+        };
+
+        const t1Id = getTeamId(competitors[0]);
+        const t2Id = getTeamId(competitors[1]);
+        const winnerId = getTeamId(winnerComp);
+
+        if (!t1Id || !t2Id || !winnerId) continue;
+
+        resultsData.push({ team1Id: t1Id, team2Id: t2Id, winnerId });
+      }
+    } catch {
+      // skip date on error
+    }
+  }
+
+  if (resultsData.length === 0) return 0;
+
+  const res = await fetch("/api/results/autosync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resultsData }),
+  });
+  if (!res.ok) return 0;
+  const json = await res.json() as { saved?: number };
+  return json.saved ?? 0;
+}
+
 const POLL_INTERVAL_MS = 60_000; // re-fetch odds every 60 seconds
 
 /**
@@ -196,8 +269,11 @@ export default function OddsAutoSync() {
     async function sync() {
       if (cancelled) return;
       try {
-        const saved = await fetchAndSync();
-        if (!cancelled && saved > 0) {
+        const [savedOdds, savedResults] = await Promise.all([
+          fetchAndSync(),
+          fetchAndSyncResults(),
+        ]);
+        if (!cancelled && (savedOdds > 0 || savedResults > 0)) {
           router.refresh();
         }
       } catch {
