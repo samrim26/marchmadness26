@@ -7,6 +7,8 @@
   --foreground: #f1f5f9; /* slate-100 */
 }
 
+/* ─── Base ──────────────────────────────────────────────────────────────────── */
+
 html {
   scroll-behavior: smooth;
 }
@@ -18,16 +20,26 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Table row hover */
+/* Custom scrollbar — minimal, dark */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* ─── Table ─────────────────────────────────────────────────────────────────── */
+
 .table-row-hover:hover {
   background-color: rgba(148, 163, 184, 0.05);
 }
 
-/* Consistent focus ring */
+/* ─── Focus ─────────────────────────────────────────────────────────────────── */
+
 *:focus-visible {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
 }
+
+/* ─── Components ────────────────────────────────────────────────────────────── */
 
 @layer components {
   /* Standard card */
@@ -35,31 +47,67 @@ body {
     @apply rounded-xl border border-slate-800 bg-slate-900/60;
   }
 
+  /* Card with hover lift */
+  .card-hover {
+    @apply card transition-all hover:border-slate-700 hover:bg-slate-900/80;
+  }
+
   /* Section heading */
   .section-title {
-    @apply text-lg font-semibold text-white;
+    @apply text-base font-semibold text-white tracking-tight;
   }
 
   /* Muted label above a value */
   .stat-label {
-    @apply text-xs text-slate-500 uppercase tracking-wider;
+    @apply text-[11px] text-slate-500 uppercase tracking-widest font-medium;
+  }
+
+  /* Metric number */
+  .metric {
+    @apply text-2xl font-bold tabular-nums text-white;
+  }
+
+  /* Divider */
+  .divider {
+    @apply border-t border-slate-800/80;
   }
 }
+
+/* ─── Utilities ─────────────────────────────────────────────────────────────── */
 
 @layer utilities {
   /* Pulsing live indicator dot */
   .live-dot {
-    @apply inline-block w-2 h-2 rounded-full bg-emerald-400;
+    @apply inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0;
     animation: pulse-dot 2s ease-in-out infinite;
   }
 
   @keyframes pulse-dot {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.85); }
+    50%       { opacity: 0.5; transform: scale(0.75); }
   }
 
   /* Tabular nums for all probability/score displays */
   .num {
     @apply tabular-nums font-medium;
+  }
+
+  /* Fade-in on mount */
+  .fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Subtle glow ring for highlighted elements */
+  .glow-blue {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3), 0 0 12px rgba(59, 130, 246, 0.1);
+  }
+
+  .glow-emerald {
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.3), 0 0 12px rgba(52, 211, 153, 0.08);
   }
 }

@@ -22,8 +22,8 @@ export default function RootLayout({
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </main>
-        <footer className="mt-16 border-t border-slate-800 py-6 text-center text-sm text-slate-500">
-          March Madness 2026 · Bracket Odds Tracker · Probabilities weighted by live sportsbook odds
+        <footer className="mt-16 border-t border-slate-800/60 py-5 text-center text-xs text-slate-600">
+          2026 March Madness Bracket Tracker · probabilities weighted by live sportsbook odds
         </footer>
       </body>
     </html>

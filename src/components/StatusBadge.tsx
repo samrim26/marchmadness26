@@ -7,7 +7,7 @@ interface Props {
 export function StatusBadge({ analytics }: Props) {
   if (analytics.eliminated) {
     return (
-      <span className="inline-flex items-center rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-400">
+      <span className="inline-flex items-center rounded-md bg-slate-800/80 px-2 py-0.5 text-[11px] font-medium text-slate-500">
         Eliminated
       </span>
     );
@@ -15,14 +15,16 @@ export function StatusBadge({ analytics }: Props) {
 
   if (analytics.rank === 1 && analytics.firstOrTieProbability > 0) {
     return (
-      <span className="inline-flex items-center rounded-full bg-blue-900/60 px-2 py-0.5 text-xs font-medium text-blue-300 ring-1 ring-blue-500/40">
-        Most Likely
+      <span className="inline-flex items-center gap-1 rounded-md bg-blue-900/50 px-2 py-0.5 text-[11px] font-semibold text-blue-300 ring-1 ring-blue-600/30">
+        <span className="w-1 h-1 rounded-full bg-blue-400 inline-block" />
+        Leader
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center rounded-full bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-emerald-500/30">
+    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-900/30 px-2 py-0.5 text-[11px] font-medium text-emerald-400 ring-1 ring-emerald-700/30">
+      <span className="w-1 h-1 rounded-full bg-emerald-500 inline-block" />
       Alive
     </span>
   );

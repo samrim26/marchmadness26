@@ -38,7 +38,7 @@ export default async function HomePage() {
   )[0];
   const upcoming = getGamesWithKnownParticipants(GAMES, RESULTS).slice(0, 4);
 
-  // Find alive brackets that would be eliminated by a single game result
+  // Bubble: alive brackets that would be eliminated by any single game result
   const outcomeRows = buildOutcomeRowsForState(ENTRIES, GAMES, RESULTS, gameProbs);
   const knownGames = getGamesWithKnownParticipants(GAMES, RESULTS);
 
@@ -60,84 +60,107 @@ export default async function HomePage() {
     }
   }
 
+  const tournamentProgress = Math.round((completed.length / GAMES.length) * 100);
+
   return (
-    <div className="space-y-10">
-      {/* Live scoreboard */}
+    <div className="space-y-8">
+
+      {/* Scoreboard strip */}
       <LiveScoreboard />
 
-      {/* Hero */}
-      <div className="text-center space-y-2 py-4">
-        <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-          2026 March Madness
-          <span className="block text-blue-400">Bracket Odds Tracker</span>
-        </h1>
-        <p className="text-slate-400 text-lg">
-          {ENTRIES.length} brackets · exact probability engine · live updates
-        </p>
+      {/* Page header */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">
+            2026 March Madness
+          </h1>
+          <p className="text-slate-500 text-sm mt-0.5">
+            {ENTRIES.length} brackets · {completed.length}/{GAMES.length} games complete
+          </p>
+        </div>
+        {/* Progress bar */}
+        <div className="hidden sm:flex flex-col items-end gap-1">
+          <span className="text-xs text-slate-500">{tournamentProgress}% complete</span>
+          <div className="w-32 h-1.5 rounded-full bg-slate-800">
+            <div
+              className="h-1.5 rounded-full bg-blue-500/70 transition-all"
+              style={{ width: `${tournamentProgress}%` }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Brackets" value={ENTRIES.length.toString()} />
-        <StatCard label="Games Remaining" value={remaining.length.toString()} />
-        <StatCard label="Still Alive" value={alive.toString()} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard
+          label="Brackets"
+          value={ENTRIES.length.toString()}
+          accent="blue"
+        />
+        <StatCard
+          label="Games Left"
+          value={remaining.length.toString()}
+          accent={remaining.length > 0 ? "amber" : "slate"}
+        />
+        <StatCard
+          label="Still Alive"
+          value={alive.toString()}
+          accent="emerald"
+        />
         <StatCard
           label="Eliminated"
           value={eliminated.toString()}
-          dim={eliminated === 0}
+          accent={eliminated > 0 ? "red" : "slate"}
         />
       </div>
 
       {/* Leaders */}
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-          <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">
-            Current Leader
-          </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="card p-5">
+          <div className="stat-label mb-2">Current Leader</div>
           {leader ? (
             <>
-              <div className="text-2xl font-bold text-white">
-                {leader.displayName}
-              </div>
-              <div className="text-slate-400 mt-1">
-                {leader.currentScore} pts · max {leader.maxPossibleScore}
+              <div className="text-xl font-bold text-white">{leader.displayName}</div>
+              <div className="flex items-baseline gap-1.5 mt-1">
+                <span className="text-2xl font-bold text-white tabular-nums">{leader.currentScore}</span>
+                <span className="text-slate-500 text-sm">pts</span>
+                <span className="text-slate-600 text-sm">·</span>
+                <span className="text-slate-500 text-sm">max {leader.maxPossibleScore}</span>
               </div>
             </>
           ) : (
-            <div className="text-slate-400">No data</div>
+            <div className="text-slate-500">No data</div>
           )}
         </div>
 
-        <div className="rounded-xl border border-blue-800/50 bg-blue-900/20 p-5">
-          <div className="text-xs uppercase tracking-wider text-blue-500 mb-1">
-            Most Likely to Win
-          </div>
+        <div className="card p-5 border-blue-900/60 bg-blue-950/20 glow-blue">
+          <div className="stat-label mb-2 text-blue-500">Most Likely to Win</div>
           {mostLikely && !mostLikely.eliminated ? (
             <>
-              <div className="text-2xl font-bold text-white">
-                {mostLikely.displayName}
-              </div>
-              <div className="text-slate-400 mt-1">
-                {formatPercent(mostLikely.firstOrTieProbability)} first-or-tie
-                chance
+              <div className="text-xl font-bold text-white">{mostLikely.displayName}</div>
+              <div className="flex items-baseline gap-1.5 mt-1">
+                <span className="text-2xl font-bold text-blue-400 tabular-nums">
+                  {formatPercent(mostLikely.firstOrTieProbability)}
+                </span>
+                <span className="text-slate-500 text-sm">first-or-tie chance</span>
               </div>
             </>
           ) : (
-            <div className="text-slate-400">—</div>
+            <div className="text-slate-500">—</div>
           )}
         </div>
       </div>
 
-      {/* Upcoming games — most live content first */}
+      {/* Upcoming games */}
       {upcoming.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Next Games</h2>
-            <Link href="/stakes" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="section-title">Next Games</h2>
+            <Link href="/stakes" className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium">
               See stakes →
             </Link>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {upcoming.map((g) => (
               <GameCard key={g.id} game={g} results={RESULTS} />
             ))}
@@ -145,43 +168,49 @@ export default async function HomePage() {
         </div>
       )}
 
-      {/* Standings — top 5 */}
+      {/* Standings top 5 */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Standings</h2>
-          <Link href="/standings" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="section-title">Standings</h2>
+          <Link href="/standings" className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium">
             Full table →
           </Link>
         </div>
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="card overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-900">
+            <thead className="bg-slate-900/80">
               <tr>
-                <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-400">Entry</th>
-                <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-400">Pts</th>
-                <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-400">Win/Tie %</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-400">Status</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-widest text-slate-500">#</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-widest text-slate-500">Entry</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-medium uppercase tracking-widest text-slate-500">Pts</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-medium uppercase tracking-widest text-slate-500">Win/Tie %</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-widest text-slate-500">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
               {[...analytics]
-                .sort((a, b) => b.firstOrTieProbability - a.firstOrTieProbability || b.currentScore - a.currentScore || a.displayName.localeCompare(b.displayName))
+                .sort((a, b) =>
+                  b.firstOrTieProbability - a.firstOrTieProbability ||
+                  b.currentScore - a.currentScore ||
+                  a.displayName.localeCompare(b.displayName)
+                )
                 .slice(0, 5)
-                .map((a) => (
-                  <tr key={a.entryId} className={`table-row-hover ${a.eliminated ? "opacity-50" : ""}`}>
+                .map((a, i) => (
+                  <tr key={a.entryId} className={`table-row-hover ${a.eliminated ? "opacity-40" : ""}`}>
+                    <td className="px-4 py-2.5 text-slate-600 tabular-nums text-sm">{i + 1}</td>
                     <td className="px-4 py-2.5 font-medium text-white">
                       <Link href={`/path/${a.entryId}`} className="hover:text-blue-300 transition-colors">
                         {a.displayName}
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-300">{a.currentScore}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-300">{formatPercent(a.firstOrTieProbability)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-300 font-medium">{a.currentScore}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-400 font-semibold">{formatPercent(a.firstOrTieProbability)}</td>
                     <td className="px-4 py-2.5"><StatusBadge analytics={a} /></td>
                   </tr>
                 ))}
             </tbody>
           </table>
-          <div className="px-4 py-2.5 bg-slate-900/50 border-t border-slate-800 text-center">
+          <div className="px-4 py-2 bg-slate-900/40 border-t border-slate-800/60 text-center">
             <Link href="/standings" className="text-xs text-slate-500 hover:text-blue-400 transition-colors">
               View all {analytics.length} brackets →
             </Link>
@@ -192,13 +221,19 @@ export default async function HomePage() {
       {/* On the bubble */}
       {bubbleEntries.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold text-white mb-3">On the Bubble</h2>
-          <div className="rounded-xl border border-orange-800/40 bg-orange-900/10 divide-y divide-orange-900/30">
+          <h2 className="section-title mb-3">On the Bubble</h2>
+          <div className="card border-amber-900/40 bg-amber-950/10 divide-y divide-amber-900/20">
             {bubbleEntries.map(({ displayName, killers }) => (
-              <div key={displayName} className="px-4 py-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+              <div key={displayName} className="px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
                 <span className="font-semibold text-white">{displayName}</span>
-                <span className="text-slate-400">eliminated if</span>
-                <span className="text-orange-300">{killers.join(" or ")}</span>
+                <span className="text-slate-500 text-xs">eliminated if</span>
+                <div className="flex flex-wrap gap-1">
+                  {killers.map((k, i) => (
+                    <span key={i} className="inline-flex items-center rounded-md bg-amber-900/30 border border-amber-800/50 px-2 py-0.5 text-xs text-amber-300 font-medium">
+                      {k}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -206,11 +241,11 @@ export default async function HomePage() {
       )}
 
       {/* Quick links */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <QuickLink href="/standings" icon="📊" title="Standings" desc="Full table with win %, max possible, and status." />
-        <QuickLink href="/brackets" icon="🗂️" title="Brackets" desc="Every bracket side by side — see who picked what." />
-        <QuickLink href="/stakes" icon="📈" title="Stakes" desc="Which games move the needle most for each bracket." />
-        <QuickLink href="/rooting" icon="📣" title="Rooting Guide" desc="Who to cheer for in every remaining game." />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <QuickLink href="/standings" title="Standings" desc="Full table with win %, max score, and status." />
+        <QuickLink href="/brackets" title="Brackets" desc="Every bracket side by side — who picked what." />
+        <QuickLink href="/stakes" title="Stakes" desc="Which games move the needle most for each bracket." />
+        <QuickLink href="/rooting" title="Rooting Guide" desc="Who to cheer for in every remaining game." />
       </div>
     </div>
   );
@@ -219,45 +254,49 @@ export default async function HomePage() {
 function StatCard({
   label,
   value,
-  dim,
+  accent,
 }: {
   label: string;
   value: string;
-  dim?: boolean;
+  accent: "blue" | "amber" | "emerald" | "red" | "slate";
 }) {
+  const styles = {
+    blue:    { card: "border-blue-900/50 bg-blue-950/20",    val: "text-blue-300",    label: "text-blue-600" },
+    amber:   { card: "border-amber-900/50 bg-amber-950/20",  val: "text-amber-300",   label: "text-amber-700" },
+    emerald: { card: "border-emerald-900/50 bg-emerald-950/20", val: "text-emerald-300", label: "text-emerald-700" },
+    red:     { card: "border-red-900/50 bg-red-950/20",      val: "text-red-400",     label: "text-red-700" },
+    slate:   { card: "border-slate-800 bg-slate-900/40",     val: "text-slate-500",   label: "text-slate-600" },
+  }[accent];
+
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-center">
-      <div className={`text-3xl font-bold ${dim ? "text-slate-500" : "text-white"}`}>
-        {value}
-      </div>
-      <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">
-        {label}
-      </div>
+    <div className={`rounded-xl border p-4 text-center ${styles.card}`}>
+      <div className={`text-3xl font-bold tabular-nums ${styles.val}`}>{value}</div>
+      <div className={`text-[11px] mt-1 uppercase tracking-widest font-medium ${styles.label}`}>{label}</div>
     </div>
   );
 }
 
 function QuickLink({
   href,
-  icon,
   title,
   desc,
 }: {
   href: string;
-  icon: string;
   title: string;
   desc: string;
 }) {
   return (
     <Link
       href={href}
-      className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 hover:border-slate-600 hover:bg-slate-900/80 transition-all group"
+      className="card-hover p-5 flex flex-col gap-1 group"
     >
-      <div className="text-2xl mb-2">{icon}</div>
-      <div className="font-semibold text-white group-hover:text-blue-300 transition-colors">
-        {title}
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-white group-hover:text-blue-300 transition-colors text-sm">
+          {title}
+        </span>
+        <span className="text-slate-600 group-hover:text-blue-400 transition-colors text-sm">→</span>
       </div>
-      <div className="text-sm text-slate-400 mt-1">{desc}</div>
+      <div className="text-xs text-slate-500 leading-relaxed">{desc}</div>
     </Link>
   );
 }
