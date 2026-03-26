@@ -253,21 +253,22 @@ async function fetchAndSyncResults(): Promise<number> {
   return json.saved ?? 0;
 }
 
-const POLL_INTERVAL_MS = 60_000; // re-fetch odds every 60 seconds
+const POLL_INTERVAL_MS = 20_000; // poll every 20s while tab is visible
 
 /**
- * Invisible component — polls ESPN odds from the browser every 60 seconds,
- * saves them to KV, and soft-refreshes server components so win percentages
- * update in place without a full page reload.
+ * Invisible component — polls ESPN every 20s while the tab is visible.
+ * Pauses automatically when you switch away and fires immediately when
+ * you come back, so results appear within seconds of ESPN recording them.
  */
 export default function OddsAutoSync() {
   const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
     async function sync() {
-      if (cancelled) return;
+      if (cancelled || document.hidden) return;
       try {
         const [savedOdds, savedResults] = await Promise.all([
           fetchAndSync(),
@@ -277,15 +278,37 @@ export default function OddsAutoSync() {
           router.refresh();
         }
       } catch {
-        // ignore errors — next poll will retry
+        // ignore — next poll retries
       }
     }
 
-    sync(); // immediate on mount
-    const id = setInterval(sync, POLL_INTERVAL_MS);
+    function startPolling() {
+      sync(); // fire immediately on visibility gain
+      intervalId = setInterval(sync, POLL_INTERVAL_MS);
+    }
+
+    function stopPolling() {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        startPolling();
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    startPolling();
+
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
