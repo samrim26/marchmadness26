@@ -3,8 +3,8 @@ import { GAMES } from "@/data/games";
 import { ENTRIES } from "@/data/entries";
 import { SCORING_SETTINGS } from "@/data/settings";
 import { getTeamName } from "@/data/teams";
-import { getRemainingGames, getCompletedGames, getGamesWithKnownParticipants } from "@/lib/bracket";
-import { computeEntryProbabilities } from "@/lib/simulation";
+import { getRemainingGames, getCompletedGames, getGamesWithKnownParticipants, getGameParticipant } from "@/lib/bracket";
+import { computeEntryProbabilities, buildOutcomeRowsForState } from "@/lib/simulation";
 import { getResults } from "@/lib/getResults";
 import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
 import { formatPercent } from "@/lib/format";
@@ -36,6 +36,28 @@ export default async function HomePage() {
     (a, b) => b.firstOrTieProbability - a.firstOrTieProbability
   )[0];
   const upcoming = getGamesWithKnownParticipants(GAMES, RESULTS).slice(0, 4);
+
+  // Find alive brackets that would be eliminated by a single game result
+  const outcomeRows = buildOutcomeRowsForState(ENTRIES, GAMES, RESULTS, gameProbs);
+  const knownGames = getGamesWithKnownParticipants(GAMES, RESULTS);
+
+  const bubbleEntries: { displayName: string; killers: string[] }[] = [];
+  for (const entry of analytics.filter((a) => !a.eliminated)) {
+    const ei = ENTRIES.findIndex((e) => e.id === entry.entryId);
+    const killers: string[] = [];
+    for (const game of knownGames) {
+      const t1 = getGameParticipant(game, "team1", RESULTS);
+      const t2 = getGameParticipant(game, "team2", RESULTS);
+      if (!t1 || !t2) continue;
+      const winsIfT1 = outcomeRows.some((r) => r.outcome[game.id] === t1 && r.scores[ei] === r.maxScore);
+      const winsIfT2 = outcomeRows.some((r) => r.outcome[game.id] === t2 && r.scores[ei] === r.maxScore);
+      if (!winsIfT1) killers.push(`${getTeamName(t1)} wins`);
+      if (!winsIfT2) killers.push(`${getTeamName(t2)} wins`);
+    }
+    if (killers.length > 0) {
+      bubbleEntries.push({ displayName: entry.displayName, killers });
+    }
+  }
 
   return (
     <div className="space-y-10">
@@ -167,6 +189,22 @@ export default async function HomePage() {
           </table>
         </div>
       </div>
+
+      {/* On the bubble */}
+      {bubbleEntries.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold text-white mb-3">On the Bubble</h2>
+          <div className="rounded-xl border border-orange-800/40 bg-orange-900/10 divide-y divide-orange-900/30">
+            {bubbleEntries.map(({ displayName, killers }) => (
+              <div key={displayName} className="px-4 py-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                <span className="font-semibold text-white">{displayName}</span>
+                <span className="text-slate-400">eliminated if</span>
+                <span className="text-orange-300">{killers.join(" or ")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Upcoming games */}
       {upcoming.length > 0 && (
