@@ -178,8 +178,8 @@ export default async function HomePage() {
                 .map((a, i) => (
                   <tr key={a.entryId} className={`table-row-hover ${a.eliminated ? "opacity-40" : ""}`}>
                     <td className="px-4 py-2.5 text-slate-600 tabular-nums text-sm">{i + 1}</td>
-                    <td className="px-4 py-2.5 font-medium text-white">
-                      <Link href={`/path/${a.entryId}`} className="hover:text-blue-300 transition-colors">
+                    <td className="px-4 py-2.5 font-medium">
+                      <Link href={`/path/${a.entryId}`} className="text-blue-400 hover:text-blue-300 transition-colors">
                         {a.displayName}
                       </Link>
                     </td>

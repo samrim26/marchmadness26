@@ -102,8 +102,10 @@ export function StandingsTable({ analytics }: Props) {
               <td className="px-4 py-3 text-slate-500 tabular-nums">
                 {i + 1}
               </td>
-              <td className="px-4 py-3 font-medium text-white">
-                {a.displayName}
+              <td className="px-4 py-3 font-medium">
+                <a href={`/path/${a.entryId}`} className="text-blue-400 hover:text-blue-300 transition-colors">
+                  {a.displayName}
+                </a>
               </td>
               <td className="px-4 py-3 text-right tabular-nums text-slate-200">
                 {a.currentScore}
