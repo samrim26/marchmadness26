@@ -8,10 +8,11 @@ import { getResults } from "@/lib/getResults";
 export const dynamic = "force-dynamic";
 import { getAllRootingData } from "@/lib/rooting";
 import { computeEntryProbabilities } from "@/lib/simulation";
-import { getGamesWithKnownParticipants, getGameParticipant } from "@/lib/bracket";
+import { getGamesWithKnownParticipants } from "@/lib/bracket";
 import { formatPercent } from "@/lib/format";
 import { RootingMatrix } from "@/components/RootingMatrix";
 import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
+import { fetchESPNSchedule, buildGameTimeMap } from "@/lib/espnSchedule";
 
 export const metadata: Metadata = {
   title: "Rooting Guide | March Madness 2026",
@@ -30,6 +31,20 @@ export default async function RootingPage() {
   );
   const rootingData = getAllRootingData(ENTRIES, GAMES, RESULTS, SCORING_SETTINGS, gameProbs);
   const actionableGames = getGamesWithKnownParticipants(GAMES, RESULTS);
+
+  // Fetch game times for ordering
+  const espnGames = await fetchESPNSchedule(1, 7);
+  const gameTimeMap = buildGameTimeMap(espnGames, GAMES, RESULTS);
+
+  // Sort actionable games by scheduled time
+  const sortedGames = [...actionableGames].sort((a, b) => {
+    const ta = gameTimeMap[a.id]?.startTime ?? "";
+    const tb = gameTimeMap[b.id]?.startTime ?? "";
+    if (!ta && !tb) return 0;
+    if (!ta) return 1;
+    if (!tb) return -1;
+    return ta.localeCompare(tb);
+  });
 
   const entryNames = Object.fromEntries(
     ENTRIES.map((e) => [e.id, e.displayName])
@@ -76,6 +91,17 @@ export default async function RootingPage() {
         <div className="grid sm:grid-cols-2 gap-6">
           {sortedRooting.map((ed) => {
             const a = analytics.find((x) => x.entryId === ed.entryId)!;
+
+            // Sort this entry's recommendations by game time
+            const sortedRecs = [...ed.recommendations].sort((ra, rb) => {
+              const ta = gameTimeMap[ra.gameId]?.startTime ?? "";
+              const tb = gameTimeMap[rb.gameId]?.startTime ?? "";
+              if (!ta && !tb) return 0;
+              if (!ta) return 1;
+              if (!tb) return -1;
+              return ta.localeCompare(tb);
+            });
+
             return (
               <div
                 key={ed.entryId}
@@ -115,40 +141,51 @@ export default async function RootingPage() {
                   </div>
                 )}
 
-                {/* All game recommendations */}
+                {/* All game recommendations — sorted by time */}
                 <div className="space-y-1.5">
-                  {ed.recommendations.map((rec) => (
-                    <div
-                      key={rec.gameId}
-                      className="flex items-center justify-between text-sm gap-4"
-                    >
-                      <span className="text-slate-400 truncate min-w-0">
-                        {rec.team1Name} vs {rec.team2Name}
-                      </span>
-                      {rec.preferredTeamId ? (
-                        <span className="flex items-center gap-2 shrink-0">
-                          <span className="font-medium text-white">
-                            {rec.preferredTeamName}
+                  {sortedRecs.map((rec) => {
+                    const espnInfo = gameTimeMap[rec.gameId];
+                    const isLive = espnInfo?.statusState === "in";
+                    return (
+                      <div
+                        key={rec.gameId}
+                        className="flex items-center justify-between text-sm gap-4"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-slate-400 truncate block">
+                            {rec.team1Name} vs {rec.team2Name}
                           </span>
-                          <span
-                            className={`text-xs tabular-nums ${
-                              rec.strength === "strong"
-                                ? "text-emerald-400"
-                                : rec.strength === "moderate"
-                                ? "text-emerald-500"
-                                : "text-slate-500"
-                            }`}
-                          >
-                            +{(rec.delta * 100).toFixed(1)}%
+                          {espnInfo && (
+                            <span className={`text-xs ${isLive ? "text-emerald-400 font-medium" : "text-slate-600"}`}>
+                              {isLive ? `LIVE · ${espnInfo.statusDetail}` : espnInfo.timeDisplay}
+                            </span>
+                          )}
+                        </div>
+                        {rec.preferredTeamId ? (
+                          <span className="flex items-center gap-2 shrink-0">
+                            <span className="font-medium text-white">
+                              {rec.preferredTeamName}
+                            </span>
+                            <span
+                              className={`text-xs tabular-nums ${
+                                rec.strength === "strong"
+                                  ? "text-emerald-400"
+                                  : rec.strength === "moderate"
+                                  ? "text-emerald-500"
+                                  : "text-slate-500"
+                              }`}
+                            >
+                              +{(rec.delta * 100).toFixed(1)}%
+                            </span>
                           </span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-600 text-xs shrink-0">
-                          No preference
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                        ) : (
+                          <span className="text-slate-600 text-xs shrink-0">
+                            No preference
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

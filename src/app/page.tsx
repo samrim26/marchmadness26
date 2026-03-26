@@ -10,6 +10,7 @@ import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
 import { formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GameCard } from "@/components/GameCard";
+import { LiveScoreboard } from "@/components/LiveScoreboard";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,9 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-10">
+      {/* Live scoreboard */}
+      <LiveScoreboard />
+
       {/* Hero */}
       <div className="text-center space-y-2 py-4">
         <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">

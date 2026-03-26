@@ -11,6 +11,7 @@ import { computeEntryProbabilities } from "@/lib/simulation";
 import { getGamesWithKnownParticipants, getGameParticipant } from "@/lib/bracket";
 import { formatPercent } from "@/lib/format";
 import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
+import { fetchESPNSchedule, buildGameTimeMap } from "@/lib/espnSchedule";
 
 export const metadata: Metadata = {
   title: "Scenarios | March Madness 2026",
@@ -39,12 +40,26 @@ export default async function ScenariosPage() {
 
   const actionableGames = getGamesWithKnownParticipants(GAMES, RESULTS);
 
+  // Fetch game times for ordering
+  const espnGames = await fetchESPNSchedule(1, 7);
+  const gameTimeMap = buildGameTimeMap(espnGames, GAMES, RESULTS);
+
+  // Sort by scheduled time (earliest first)
+  const sortedGames = [...actionableGames].sort((a, b) => {
+    const ta = gameTimeMap[a.id]?.startTime ?? "";
+    const tb = gameTimeMap[b.id]?.startTime ?? "";
+    if (!ta && !tb) return 0;
+    if (!ta) return 1;
+    if (!tb) return -1;
+    return ta.localeCompare(tb);
+  });
+
   return (
     <div className="space-y-10">
       <div>
         <h1 className="text-2xl font-bold text-white">Scenario Analysis</h1>
         <p className="text-slate-400 mt-1">
-          How each remaining game's outcome shifts everyone's win probability.
+          How each remaining game&apos;s outcome shifts everyone&apos;s win probability.
           Numbers show change from the current baseline probability.
         </p>
       </div>
@@ -55,7 +70,7 @@ export default async function ScenariosPage() {
         </div>
       )}
 
-      {actionableGames.map((game) => {
+      {sortedGames.map((game) => {
         const gameDeltaSet = byGame.get(game.id);
         if (!gameDeltaSet) return null;
 
@@ -64,9 +79,36 @@ export default async function ScenariosPage() {
         const d1 = gameDeltaSet.find((d) => d.winnerId === t1);
         const d2 = gameDeltaSet.find((d) => d.winnerId === t2);
 
+        const espnInfo = gameTimeMap[game.id];
+        const isLive = espnInfo?.statusState === "in";
+        const isFinal = espnInfo?.statusState === "post";
+
         return (
           <div key={game.id} className="space-y-3">
-            <h2 className="text-lg font-semibold text-white">{game.label}</h2>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-semibold text-white">{game.label}</h2>
+                {isLive && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
+                    <span className="live-dot" />
+                    LIVE · {espnInfo.statusDetail}
+                    {espnInfo.team1Score != null && (
+                      <span className="text-slate-300 ml-1 tabular-nums">
+                        {espnInfo.team1Name} {espnInfo.team1Score}–{espnInfo.team2Score} {espnInfo.team2Name}
+                      </span>
+                    )}
+                  </span>
+                )}
+                {isFinal && espnInfo.team1Score != null && (
+                  <span className="text-xs text-slate-500">
+                    Final: {espnInfo.team1Name} {espnInfo.team1Score}–{espnInfo.team2Score} {espnInfo.team2Name}
+                  </span>
+                )}
+              </div>
+              {espnInfo && !isLive && !isFinal && (
+                <p className="text-xs text-slate-500 mt-0.5">{espnInfo.timeDisplay}</p>
+              )}
+            </div>
             <div className="grid sm:grid-cols-2 gap-4">
               {[d1, d2].filter(Boolean).map((scenario) => (
                 <div

@@ -8,6 +8,7 @@ import { computeScenarioDeltas } from "@/lib/rooting";
 import { getGameParticipant } from "@/lib/bracket";
 import { getTeamName } from "@/data/teams";
 import { parseBracketName } from "@/data/prizeConfig";
+import { fetchESPNSchedule, buildGameTimeMap } from "@/lib/espnSchedule";
 
 export const metadata: Metadata = { title: "Game Stakes | March Madness 2026" };
 export const dynamic = "force-dynamic";
@@ -34,10 +35,24 @@ export default async function StakesPage() {
     gameProbs
   );
 
+  // Fetch ESPN schedule for game times
+  const espnGames = await fetchESPNSchedule(1, 7);
+  const gameTimeMap = buildGameTimeMap(espnGames, GAMES, RESULTS);
+
   // Group deltas by game (each game has 2 entries: t1 wins, t2 wins)
   const gameIds = [...new Set(deltas.map((d) => d.gameId))];
 
-  if (gameIds.length === 0) {
+  // Sort game IDs by scheduled start time (earliest first), unknowns last
+  const sortedGameIds = [...gameIds].sort((a, b) => {
+    const ta = gameTimeMap[a]?.startTime ?? "";
+    const tb = gameTimeMap[b]?.startTime ?? "";
+    if (!ta && !tb) return 0;
+    if (!ta) return 1;
+    if (!tb) return -1;
+    return ta.localeCompare(tb);
+  });
+
+  if (sortedGameIds.length === 0) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-white">Game Stakes</h1>
@@ -58,8 +73,7 @@ export default async function StakesPage() {
         </p>
       </div>
 
-      {gameIds.map((gameId) => {
-        const t1Delta = deltas.find((d) => d.gameId === gameId && d.winnerId !== deltas.find((x) => x.gameId === gameId && x.winnerId !== d.winnerId)?.winnerId);
+      {sortedGameIds.map((gameId) => {
         const pair = deltas.filter((d) => d.gameId === gameId);
         if (pair.length < 2) return null;
 
@@ -69,6 +83,10 @@ export default async function StakesPage() {
         const t2Id = getGameParticipant(game, "team2", RESULTS);
         const t1Name = t1Id ? getTeamName(t1Id) : "TBD";
         const t2Name = t2Id ? getTeamName(t2Id) : "TBD";
+
+        const espnInfo = gameTimeMap[gameId];
+        const isLive = espnInfo?.statusState === "in";
+        const isFinal = espnInfo?.statusState === "post";
 
         // Per entry: compute total swing = |prob if t1 wins - prob if t2 wins|
         const entrySwings = d1.deltas.map((e, i) => {
@@ -96,11 +114,37 @@ export default async function StakesPage() {
             {/* Game header */}
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <div className="text-base font-semibold text-white">{game.label}</div>
-                <div className="text-sm text-slate-400 mt-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="text-base font-semibold text-white">{game.label}</div>
+                  {isLive && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
+                      <span className="live-dot" />
+                      LIVE · {espnInfo.statusDetail}
+                    </span>
+                  )}
+                  {isFinal && (
+                    <span className="text-xs text-slate-500 font-medium">Final</span>
+                  )}
+                </div>
+                <div className="text-sm text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
                   <span className="text-white">{t1Name}</span>
-                  <span className="text-slate-600 mx-2">vs</span>
+                  {isLive || isFinal ? (
+                    <>
+                      <span className="text-slate-300 font-bold tabular-nums">
+                        {espnInfo.team1Score ?? "–"}
+                      </span>
+                      <span className="text-slate-600">–</span>
+                      <span className="text-slate-300 font-bold tabular-nums">
+                        {espnInfo.team2Score ?? "–"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-600 mx-1">vs</span>
+                  )}
                   <span className="text-white">{t2Name}</span>
+                  {espnInfo && !isLive && !isFinal && (
+                    <span className="text-slate-500 text-xs">{espnInfo.timeDisplay}</span>
+                  )}
                 </div>
               </div>
               <div className="text-xs text-slate-500">
