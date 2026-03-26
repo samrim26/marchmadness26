@@ -9,7 +9,6 @@ import { getResults } from "@/lib/getResults";
 import { getManualOdds, manualOddsToGameProbs } from "@/lib/manualOdds";
 import { formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GameCard } from "@/components/GameCard";
 import { LiveScoreboard } from "@/components/LiveScoreboard";
 
 export const dynamic = "force-dynamic";
@@ -36,8 +35,6 @@ export default async function HomePage() {
   const mostLikely = [...analytics].sort(
     (a, b) => b.firstOrTieProbability - a.firstOrTieProbability
   )[0];
-  const upcoming = getGamesWithKnownParticipants(GAMES, RESULTS).slice(0, 4);
-
   // Bubble: alive brackets that would be eliminated by any single game result
   const outcomeRows = buildOutcomeRowsForState(ENTRIES, GAMES, RESULTS, gameProbs);
   const knownGames = getGamesWithKnownParticipants(GAMES, RESULTS);
@@ -150,23 +147,6 @@ export default async function HomePage() {
           )}
         </div>
       </div>
-
-      {/* Upcoming games */}
-      {upcoming.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="section-title">Next Games</h2>
-            <Link href="/stakes" className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium">
-              See stakes →
-            </Link>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {upcoming.map((g) => (
-              <GameCard key={g.id} game={g} results={RESULTS} />
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Standings top 5 */}
       <div>
