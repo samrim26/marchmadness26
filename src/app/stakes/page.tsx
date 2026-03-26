@@ -171,6 +171,8 @@ export default async function StakesPage() {
                 <tbody className="divide-y divide-slate-800/50">
                   {sorted.map((e) => {
                     const prefersT1 = e.swing > 0;
+                    const elimIfT1 = e.afterT1 === 0 && e.before > 0;
+                    const elimIfT2 = e.afterT2 === 0 && e.before > 0;
                     const swingColor =
                       e.absSwing >= 0.05
                         ? "text-orange-300"
@@ -184,17 +186,33 @@ export default async function StakesPage() {
                         <td className="px-4 py-2.5 text-right tabular-nums text-slate-400">
                           {fmtProb(e.before)}
                         </td>
-                        <td className={`px-4 py-2.5 text-right tabular-nums ${prefersT1 ? "text-emerald-400" : "text-slate-400"}`}>
-                          <span className="font-medium">{fmtProb(e.afterT1)}</span>
-                          <span className={`text-xs ml-1 ${e.afterT1 > e.before ? "text-emerald-500" : e.afterT1 < e.before ? "text-red-500" : "text-slate-600"}`}>
-                            {fmtDelta(e.afterT1 - e.before)}
-                          </span>
+                        <td className={`px-4 py-2.5 text-right tabular-nums ${elimIfT1 ? "bg-red-950/40" : ""} ${prefersT1 ? "text-emerald-400" : "text-slate-400"}`}>
+                          {elimIfT1 ? (
+                            <span className="inline-flex items-center justify-end gap-1.5">
+                              <span className="text-xs font-semibold text-red-400 bg-red-900/50 px-1.5 py-0.5 rounded">ELIM</span>
+                            </span>
+                          ) : (
+                            <>
+                              <span className="font-medium">{fmtProb(e.afterT1)}</span>
+                              <span className={`text-xs ml-1 ${e.afterT1 > e.before ? "text-emerald-500" : e.afterT1 < e.before ? "text-red-500" : "text-slate-600"}`}>
+                                {fmtDelta(e.afterT1 - e.before)}
+                              </span>
+                            </>
+                          )}
                         </td>
-                        <td className={`px-4 py-2.5 text-right tabular-nums ${!prefersT1 ? "text-emerald-400" : "text-slate-400"}`}>
-                          <span className="font-medium">{fmtProb(e.afterT2)}</span>
-                          <span className={`text-xs ml-1 ${e.afterT2 > e.before ? "text-emerald-500" : e.afterT2 < e.before ? "text-red-500" : "text-slate-600"}`}>
-                            {fmtDelta(e.afterT2 - e.before)}
-                          </span>
+                        <td className={`px-4 py-2.5 text-right tabular-nums ${elimIfT2 ? "bg-red-950/40" : ""} ${!prefersT1 ? "text-emerald-400" : "text-slate-400"}`}>
+                          {elimIfT2 ? (
+                            <span className="inline-flex items-center justify-end gap-1.5">
+                              <span className="text-xs font-semibold text-red-400 bg-red-900/50 px-1.5 py-0.5 rounded">ELIM</span>
+                            </span>
+                          ) : (
+                            <>
+                              <span className="font-medium">{fmtProb(e.afterT2)}</span>
+                              <span className={`text-xs ml-1 ${e.afterT2 > e.before ? "text-emerald-500" : e.afterT2 < e.before ? "text-red-500" : "text-slate-600"}`}>
+                                {fmtDelta(e.afterT2 - e.before)}
+                              </span>
+                            </>
+                          )}
                         </td>
                         <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${swingColor}`}>
                           {fmtProb(e.absSwing)}
