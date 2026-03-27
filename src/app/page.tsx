@@ -224,8 +224,8 @@ export default async function HomePage() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <QuickLink href="/standings" title="Standings" desc="Full table with win %, max score, and status." />
         <QuickLink href="/brackets" title="Brackets" desc="Every bracket side by side — who picked what." />
+        <QuickLink href="/compare" title="Compare" desc="Pick two brackets and compare every matchup head-to-head." />
         <QuickLink href="/stakes" title="Stakes" desc="Which games move the needle most for each bracket." />
-        <QuickLink href="/rooting" title="Rooting Guide" desc="Who to cheer for in every remaining game." />
       </div>
     </div>
   );

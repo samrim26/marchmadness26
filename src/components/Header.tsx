@@ -10,6 +10,7 @@ const NAV = [
   { href: "/brackets", label: "Brackets" },
   { href: "/stakes", label: "Stakes" },
   { href: "/rooting", label: "Rooting" },
+  { href: "/compare", label: "Compare" },
   { href: "/scenarios", label: "Scenarios" },
   { href: "/hedging", label: "Hedging" },
   { href: "/admin", label: "Admin" },
