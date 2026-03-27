@@ -230,20 +230,27 @@ export function CompareClient({
                         .trim();
 
                       return (
-                        <div key={game.id} className={`px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${agree ? "" : "bg-amber-950/10"}`}>
+                        <div key={game.id} className={`px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-start gap-3 ${agree ? "" : "bg-amber-950/10"}`}>
                           {/* Pick A */}
-                          <div className="flex flex-col items-start gap-1">
+                          <div className="flex flex-col items-start gap-1.5">
                             <PickBadge
                               pick={pickA}
                               status={statusA}
                               winner={winner}
                               accent="blue"
                             />
+                            <PointsHint
+                              status={statusA}
+                              currentScore={entryA.currentScore}
+                              pts={game.pointsValue}
+                              align="left"
+                            />
                           </div>
 
                           {/* Center: game info + agree indicator */}
-                          <div className="flex flex-col items-center gap-1 min-w-[100px] text-center">
+                          <div className="flex flex-col items-center gap-1 min-w-[100px] text-center pt-1.5">
                             <span className="text-[10px] text-slate-500 leading-tight">{matchupLabel}</span>
+                            <span className="text-[10px] text-slate-600 font-medium">+{game.pointsValue} pts</span>
                             {pickA && pickB ? (
                               agree ? (
                                 <span className="text-[10px] font-semibold text-emerald-500">= same</span>
@@ -256,12 +263,18 @@ export function CompareClient({
                           </div>
 
                           {/* Pick B */}
-                          <div className="flex flex-col items-end gap-1">
+                          <div className="flex flex-col items-end gap-1.5">
                             <PickBadge
                               pick={pickB}
                               status={statusB}
                               winner={winner}
                               accent="purple"
+                            />
+                            <PointsHint
+                              status={statusB}
+                              currentScore={entryB.currentScore}
+                              pts={game.pointsValue}
+                              align="right"
                             />
                           </div>
                         </div>
@@ -366,6 +379,43 @@ function PickBadge({
       {name}
     </span>
   );
+}
+
+function PointsHint({
+  status,
+  currentScore,
+  pts,
+  align,
+}: {
+  status: CellStatus;
+  currentScore: number;
+  pts: number;
+  align: "left" | "right";
+}) {
+  const cls = `text-[11px] tabular-nums ${align === "right" ? "text-right" : "text-left"}`;
+
+  if (status === "correct") {
+    return (
+      <span className={`${cls} text-emerald-500 font-medium`}>
+        +{pts} scored · {currentScore} pts total
+      </span>
+    );
+  }
+  if (status === "alive") {
+    return (
+      <span className={`${cls} text-slate-500`}>
+        {currentScore} → <span className="text-slate-300 font-medium">{currentScore + pts}</span> pts if wins
+      </span>
+    );
+  }
+  if (status === "wrong" || status === "dead") {
+    return (
+      <span className={`${cls} text-slate-700`}>
+        {currentScore} pts · no gain
+      </span>
+    );
+  }
+  return null;
 }
 
 function StatRow({
